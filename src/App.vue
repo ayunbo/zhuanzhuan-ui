@@ -1,85 +1,85 @@
-<script setup>
-import { RouterLink, RouterView } from 'vue-router'
-import HelloWorld from './components/HelloWorld.vue'
-</script>
-
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="@/assets/logo.svg" width="125" height="125" />
+  <div class="test-container">
+    <h2>🚀 前后端连通性测试</h2>
+    <p>点击下方按钮，向 Spring Boot 发送请求获取数据库数据：</p>
 
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
+    <button @click="fetchEmployeeData" class="btn">获取ID为1的员工信息</button>
 
-      <nav>
-        <RouterLink to="/">Home</RouterLink>
-        <RouterLink to="/about">About</RouterLink>
-      </nav>
+    <div v-if="employeeData" class="result success">
+      <h3>🎉 连接成功！后端返回的数据：</h3>
+      <pre>{{ employeeData }}</pre>
     </div>
-  </header>
 
-  <RouterView />
+    <div v-if="errorMessage" class="result error">
+      <h3>❌ 连接失败：</h3>
+      <p>{{ errorMessage }}</p>
+    </div>
+  </div>
 </template>
 
+<script setup>
+import { ref } from 'vue'
+import request from '@/utils/request' // 引入我们刚才封装的 Axios 工具
+
+// 定义两个响应式变量，用来存放成功的数据和失败的报错信息
+const employeeData = ref(null)
+const errorMessage = ref('')
+
+// 点击按钮时触发的方法
+const fetchEmployeeData = async () => {
+  try {
+    // 每次点击先清空上一次的结果
+    employeeData.value = null
+    errorMessage.value = ''
+
+    // 发送 GET 请求，实际会请求到 http://localhost:8080/employee/1
+    const response = await request.get('/employee/1')
+
+    // 把后端返回的数据赋值给变量，页面会自动更新显示
+    employeeData.value = response.data
+  } catch (error) {
+    // 如果报错了（比如后端没启动、代理没配好），捕获错误并显示
+    errorMessage.value = error.message
+  }
+}
+</script>
+
 <style scoped>
-header {
-  line-height: 1.5;
-  max-height: 100vh;
+/* 随便写点样式让它好看一点 */
+.test-container {
+  padding: 40px;
+  font-family: sans-serif;
 }
-
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
+.btn {
+  padding: 10px 20px;
+  background-color: #42b883;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
 }
-
-nav {
-  width: 100%;
-  font-size: 12px;
-  text-align: center;
-  margin-top: 2rem;
+.btn:hover {
+  background-color: #33a06f;
 }
-
-nav a.router-link-exact-active {
-  color: var(--color-text);
+.result {
+  margin-top: 20px;
+  padding: 15px;
+  border-radius: 8px;
 }
-
-nav a.router-link-exact-active:hover {
-  background-color: transparent;
+.success {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
 }
-
-nav a {
-  display: inline-block;
-  padding: 0 1rem;
-  border-left: 1px solid var(--color-border);
+.error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
 }
-
-nav a:first-of-type {
-  border: 0;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
-
-  .logo {
-    margin: 0 2rem 0 0;
-  }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  nav {
-    text-align: left;
-    margin-left: -1rem;
-    font-size: 1rem;
-
-    padding: 1rem 0;
-    margin-top: 1rem;
-  }
+pre {
+  background-color: #ffffff;
+  padding: 10px;
+  border-radius: 4px;
 }
 </style>

@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { 
+import {
   Plus,
   Stamp,
   User,
@@ -33,8 +33,8 @@ const handleAction = (path) => {
       <!-- 用户状态与快速入口 -->
       <section class="user-card">
         <div class="user-profile-brief">
-          <el-avatar 
-            :size="60" 
+          <el-avatar
+            :size="60"
             :src="authStore.user.avatar"
           >
             <el-icon :size="30"><User /></el-icon>
@@ -49,6 +49,13 @@ const handleAction = (path) => {
         <div class="user-quick-actions">
           <el-button type="primary" round :icon="Plus" @click="handleAction('/profile')">发布宝贝</el-button>
           <el-button round :icon="Stamp" @click="handleAction('/seller-auth')">卖家认证</el-button>
+          <el-button round @click="handleAction('/my-order')">
+            我的订单
+          </el-button>
+
+          <el-button round @click="handleAction('/my-order')">
+            订单管理
+          </el-button>
         </div>
       </section>
 
@@ -77,8 +84,8 @@ const handleAction = (path) => {
 
       <!-- 空状态：无假商品 -->
       <div class="empty-placeholder">
-        <el-empty 
-          description="当前校园内暂无同学发布闲置" 
+        <el-empty
+          description="当前校园内暂无同学发布闲置"
           :image-size="180"
         >
           <template #extra>

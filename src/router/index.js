@@ -56,7 +56,52 @@ const router = createRouter({
         title: '页面不存在',
       },
     },
+
+
+
+
+
+    //订单功能测试
+    {
+      path: '/order/create',
+      name: 'order-create',
+      component: () => import('@/views/OrderCreateView.vue'),
+    },
+    {
+      path: '/order-test',
+      name: 'order-test',
+      component: () => import('@/views/OrderTestView.vue')
+    },
+//模拟商品页（仅做测试）
+    {
+      path: '/goods',
+      name: 'goods-list',
+      component: () => import('@/views/GoodsListView.vue'),
+    },
+    {
+      path: '/goods/:id',
+      name: 'goods-detail',
+      component: () => import('@/views/GoodsDetailView.vue'),
+    },
+    //测试模拟支付路由
+    {
+      path: '/pay',
+      name: 'pay',
+      component: () => import('@/views/PayView.vue'),
+    },
+    {
+      path: '/my-order',
+      name: 'my-order',
+      component: () => import('@/views/MyOrderView.vue'),
+    },
+    {
+      path: '/order/detail/:id',
+      name: 'order-detail',
+      component: () => import('@/views/OrderDetailView.vue'),
+    },
   ],
+
+
 })
 
 router.beforeEach((to) => {

@@ -1,20 +1,143 @@
+﻿<script setup>
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { cancelOrder, completeOrder, getOrderPage } from '@/api/order'
+
+const router = useRouter()
+
+const defaultCover = 'https://via.placeholder.com/120x120?text=Goods'
+const loading = ref(false)
+const orderList = ref([])
+const total = ref(0)
+
+// 中文注释：type 为 1 表示买到的订单，2 表示卖出的订单。
+const query = ref({
+  page: 1,
+  pageSize: 10,
+  type: 1,
+  status: '',
+})
+
+function formatOrderStatus(status) {
+  const map = {
+    0: '待支付',
+    1: '已支付',
+    2: '已完成',
+    3: '已取消',
+    4: '超时关闭',
+  }
+  return map[status] || '未知状态'
+}
+
+function statusClass(status) {
+  const map = {
+    0: 'pending',
+    1: 'paid',
+    2: 'done',
+    3: 'cancel',
+    4: 'timeout',
+  }
+  return map[status] || ''
+}
+
+async function loadOrderList() {
+  loading.value = true
+  try {
+    const params = {
+      page: query.value.page,
+      pageSize: query.value.pageSize,
+      type: query.value.type,
+    }
+
+    if (query.value.status !== '' && query.value.status !== null) {
+      params.status = query.value.status
+    }
+
+    const data = await getOrderPage(params)
+    orderList.value = data?.records || data?.result || data?.list || []
+    total.value = data?.total || 0
+  } catch (error) {
+    ElMessage.error(error.message || '获取订单列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function switchType(type) {
+  query.value.type = type
+  query.value.page = 1
+  loadOrderList()
+}
+
+function prevPage() {
+  if (query.value.page <= 1) return
+  query.value.page--
+  loadOrderList()
+}
+
+function nextPage() {
+  if (query.value.page * query.value.pageSize >= total.value) return
+  query.value.page++
+  loadOrderList()
+}
+
+function goDetail(id) {
+  router.push(`/order/detail/${id}`)
+}
+
+function goPay(item) {
+  router.push({
+    path: '/pay',
+    query: {
+      orderId: String(item.id),
+      goodsTitle: item.goodsTitle || '',
+      amount: item.amount || '',
+    },
+  })
+}
+
+async function handleCancel(id) {
+  const ok = window.confirm('确定要取消该订单吗？')
+  if (!ok) return
+
+  try {
+    await cancelOrder(id)
+    ElMessage.success('订单已取消')
+    loadOrderList()
+  } catch (error) {
+    ElMessage.error(error.message || '取消订单失败')
+  }
+}
+
+async function handleComplete(id) {
+  const ok = window.confirm('确认已收货并完成订单吗？')
+  if (!ok) return
+
+  try {
+    await completeOrder(id)
+    ElMessage.success('订单已完成')
+    loadOrderList()
+  } catch (error) {
+    ElMessage.error(error.message || '确认完成失败')
+  }
+}
+
+onMounted(() => {
+  loadOrderList()
+})
+</script>
+
 <template>
   <div class="page">
     <div class="page-header">
       <h2>我的订单</h2>
+
       <div class="tabs">
-        <button
-          class="tab-btn"
-          :class="{ active: query.type === 1 }"
-          @click="switchType(1)"
-        >
+        <button class="tab-btn" :class="{ active: query.type === 1 }" @click="switchType(1)">
           我买到的
         </button>
-        <button
-          class="tab-btn"
-          :class="{ active: query.type === 2 }"
-          @click="switchType(2)"
-        >
+        <button class="tab-btn" :class="{ active: query.type === 2 }" @click="switchType(2)">
           我卖出的
         </button>
       </div>
@@ -32,13 +155,10 @@
     </div>
 
     <div v-if="loading" class="loading">订单加载中...</div>
-
-    <div v-else-if="orderList.length === 0" class="empty">
-      暂无订单数据
-    </div>
+    <div v-else-if="orderList.length === 0" class="empty">暂无订单数据</div>
 
     <div v-else class="order-list">
-      <div class="order-card" v-for="item in orderList" :key="item.id">
+      <div v-for="item in orderList" :key="item.id" class="order-card">
         <div class="left">
           <img :src="item.goodsCover || defaultCover" class="cover" />
         </div>
@@ -59,14 +179,12 @@
         </div>
 
         <div class="right">
-          <button class="btn detail-btn" @click="goDetail(item.id)">
-            查看详情
-          </button>
+          <button class="btn detail-btn" @click="goDetail(item.id)">查看详情</button>
 
           <button
             v-if="query.type === 1 && item.status === 0"
             class="btn pay-btn"
-            @click="handlePay(item)"
+            @click="goPay(item)"
           >
             去支付
           </button>
@@ -90,179 +208,15 @@
       </div>
     </div>
 
-    <div class="pager" v-if="total > 0">
-      <button class="page-btn" :disabled="query.page <= 1" @click="prevPage">
-        上一页
-      </button>
+    <div v-if="total > 0" class="pager">
+      <button class="page-btn" :disabled="query.page <= 1" @click="prevPage">上一页</button>
       <span>第 {{ query.page }} 页</span>
-      <button
-        class="page-btn"
-        :disabled="query.page * query.pageSize >= total"
-        @click="nextPage"
-      >
+      <button class="page-btn" :disabled="query.page * query.pageSize >= total" @click="nextPage">
         下一页
       </button>
     </div>
   </div>
 </template>
-
-<script setup>
-import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import {
-  getOrderPage,
-  cancelOrder,
-  completeOrder,
-  mockPay,
-} from '@/api/order'
-
-const router = useRouter()
-
-const defaultCover = 'https://via.placeholder.com/120x120?text=Goods'
-
-const loading = ref(false)
-const orderList = ref([])
-const total = ref(0)
-
-const query = ref({
-  page: 1,
-  pageSize: 10,
-  type: 1, // 1买家 2卖家
-  status: '',
-})
-
-const formatOrderStatus = (status) => {
-  const map = {
-    0: '待支付',
-    1: '已支付',
-    2: '已完成',
-    3: '已取消',
-    4: '超时关闭',
-  }
-  return map[status] || '未知状态'
-}
-
-const statusClass = (status) => {
-  const map = {
-    0: 'pending',
-    1: 'paid',
-    2: 'done',
-    3: 'cancel',
-    4: 'timeout',
-  }
-  return map[status] || ''
-}
-
-const loadOrderList = async () => {
-  loading.value = true
-  try {
-    const params = {
-      page: query.value.page,
-      pageSize: query.value.pageSize,
-      type: query.value.type,
-    }
-
-    if (query.value.status !== '' && query.value.status !== null) {
-      params.status = query.value.status
-    }
-
-    const res = await getOrderPage(params)
-    const data = res?.data?.data ?? res?.data ?? res
-
-    orderList.value = data.records || data.result || data.list || []
-    total.value = data.total || 0
-  } catch (error) {
-    console.error('获取订单列表失败：', error)
-    alert('获取订单列表失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-const switchType = (type) => {
-  query.value.type = type
-  query.value.page = 1
-  loadOrderList()
-}
-
-const prevPage = () => {
-  if (query.value.page > 1) {
-    query.value.page--
-    loadOrderList()
-  }
-}
-
-const nextPage = () => {
-  if (query.value.page * query.value.pageSize < total.value) {
-    query.value.page++
-    loadOrderList()
-  }
-}
-
-const goDetail = (id) => {
-  router.push(`/order/detail/${id}`)
-}
-
-const handleCancel = async (id) => {
-  const ok = window.confirm('确定要取消该订单吗？')
-  if (!ok) return
-
-  try {
-    await cancelOrder(id)
-    alert('取消成功')
-    loadOrderList()
-  } catch (error) {
-    console.error('取消订单失败：', error)
-    const msg =
-      error?.response?.data?.msg ||
-      error?.response?.data?.message ||
-      '取消订单失败'
-    alert(msg)
-  }
-}
-
-const handleComplete = async (id) => {
-  const ok = window.confirm('确认已收货并完成订单吗？')
-  if (!ok) return
-
-  try {
-    await completeOrder(id)
-    alert('订单已完成')
-    loadOrderList()
-  } catch (error) {
-    console.error('确认完成失败：', error)
-    const msg =
-      error?.response?.data?.msg ||
-      error?.response?.data?.message ||
-      '确认完成失败'
-    alert(msg)
-  }
-}
-
-const handlePay = async (item) => {
-  const ok = window.confirm(`确认支付订单【${item.orderNo}】吗？`)
-  if (!ok) return
-
-  try {
-    await mockPay({
-      orderId: item.id,
-    })
-    alert('支付成功')
-    loadOrderList()
-  } catch (error) {
-    console.error('支付失败：', error)
-    const msg =
-      error?.response?.data?.msg ||
-      error?.response?.data?.message ||
-      '支付失败'
-    alert(msg)
-  }
-}
-
-onMounted(() => {
-  loadOrderList()
-})
-</script>
 
 <style scoped>
 .page {

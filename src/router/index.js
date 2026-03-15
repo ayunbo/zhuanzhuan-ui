@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+﻿import { createRouter, createWebHistory } from 'vue-router'
 import { getStoredToken } from '@/utils/auth'
 
 const router = createRouter({
@@ -40,11 +40,80 @@ const router = createRouter({
       },
     },
     {
+      path: '/wallet',
+      name: 'wallet',
+      component: () => import('@/views/VirtualWalletView.vue'),
+      meta: {
+        title: '虚拟钱包',
+        requiresAuth: true,
+      },
+    },
+    {
       path: '/seller-auth',
       name: 'sellerAuth',
       component: () => import('@/views/SellerAuthView.vue'),
       meta: {
         title: '卖家认证',
+        requiresAuth: true,
+      },
+    },
+    {
+      path: '/order/create',
+      name: 'order-create',
+      component: () => import('@/views/OrderCreateView.vue'),
+      meta: {
+        title: '创建订单',
+        requiresAuth: true,
+      },
+    },
+    {
+      path: '/order-test',
+      name: 'order-test',
+      component: () => import('@/views/OrderTestView.vue'),
+      meta: {
+        title: '订单测试',
+      },
+    },
+    {
+      path: '/goods',
+      name: 'goods-list',
+      component: () => import('@/views/GoodsListView.vue'),
+      meta: {
+        title: '商品列表',
+      },
+    },
+    {
+      path: '/goods/:id',
+      name: 'goods-detail',
+      component: () => import('@/views/GoodsDetailView.vue'),
+      meta: {
+        title: '商品详情',
+      },
+    },
+    {
+      path: '/pay',
+      name: 'pay',
+      component: () => import('@/views/PayView.vue'),
+      meta: {
+        title: '订单支付',
+        requiresAuth: true,
+      },
+    },
+    {
+      path: '/my-order',
+      name: 'my-order',
+      component: () => import('@/views/MyOrderView.vue'),
+      meta: {
+        title: '我的订单',
+        requiresAuth: true,
+      },
+    },
+    {
+      path: '/order/detail/:id',
+      name: 'order-detail',
+      component: () => import('@/views/OrderDetailView.vue'),
+      meta: {
+        title: '订单详情',
         requiresAuth: true,
       },
     },
@@ -56,52 +125,7 @@ const router = createRouter({
         title: '页面不存在',
       },
     },
-
-
-
-
-
-    //订单功能测试
-    {
-      path: '/order/create',
-      name: 'order-create',
-      component: () => import('@/views/OrderCreateView.vue'),
-    },
-    {
-      path: '/order-test',
-      name: 'order-test',
-      component: () => import('@/views/OrderTestView.vue')
-    },
-//模拟商品页（仅做测试）
-    {
-      path: '/goods',
-      name: 'goods-list',
-      component: () => import('@/views/GoodsListView.vue'),
-    },
-    {
-      path: '/goods/:id',
-      name: 'goods-detail',
-      component: () => import('@/views/GoodsDetailView.vue'),
-    },
-    //测试模拟支付路由
-    {
-      path: '/pay',
-      name: 'pay',
-      component: () => import('@/views/PayView.vue'),
-    },
-    {
-      path: '/my-order',
-      name: 'my-order',
-      component: () => import('@/views/MyOrderView.vue'),
-    },
-    {
-      path: '/order/detail/:id',
-      name: 'order-detail',
-      component: () => import('@/views/OrderDetailView.vue'),
-    },
   ],
-
-
 })
 
 router.beforeEach((to) => {

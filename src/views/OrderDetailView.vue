@@ -1,5 +1,96 @@
+﻿<script setup>
+import { onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { cancelOrder, completeOrder, getOrderDetail } from '@/api/order'
+
+const route = useRoute()
+const router = useRouter()
+
+const defaultCover = 'https://via.placeholder.com/140x140?text=Goods'
+const detail = ref(null)
+
+function formatOrderStatus(status) {
+  const map = {
+    0: '待支付',
+    1: '已支付',
+    2: '已完成',
+    3: '已取消',
+    4: '超时关闭',
+  }
+  return map[status] || '未知状态'
+}
+
+function statusClass(status) {
+  const map = {
+    0: 'pending',
+    1: 'paid',
+    2: 'done',
+    3: 'cancel',
+    4: 'timeout',
+  }
+  return map[status] || ''
+}
+
+async function loadDetail() {
+  try {
+    const data = await getOrderDetail(Number(route.params.id))
+    detail.value = data
+  } catch (error) {
+    ElMessage.error(error.message || '获取订单详情失败')
+  }
+}
+
+function goBack() {
+  router.push('/my-order')
+}
+
+function goPay() {
+  if (!detail.value?.id) return
+
+  router.push({
+    path: '/pay',
+    query: {
+      orderId: String(detail.value.id),
+      goodsTitle: detail.value.goodsTitle || '',
+      amount: detail.value.amount || detail.value.goodsPrice || '',
+    },
+  })
+}
+
+async function handleCancel() {
+  const ok = window.confirm('确定要取消该订单吗？')
+  if (!ok) return
+
+  try {
+    await cancelOrder(detail.value.id)
+    ElMessage.success('订单已取消')
+    loadDetail()
+  } catch (error) {
+    ElMessage.error(error.message || '取消订单失败')
+  }
+}
+
+async function handleComplete() {
+  const ok = window.confirm('确认已收货并完成订单吗？')
+  if (!ok) return
+
+  try {
+    await completeOrder(detail.value.id)
+    ElMessage.success('订单已完成')
+    loadDetail()
+  } catch (error) {
+    ElMessage.error(error.message || '确认完成失败')
+  }
+}
+
+onMounted(() => {
+  loadDetail()
+})
+</script>
+
 <template>
-  <div class="page" v-if="detail">
+  <div v-if="detail" class="page">
     <div class="header">
       <h2>订单详情</h2>
       <button class="back-btn" @click="goBack">返回订单列表</button>
@@ -44,146 +135,20 @@
     </div>
 
     <div class="action-bar">
-      <button
-        v-if="detail.status === 0"
-        class="btn pay-btn"
-        @click="handlePay"
-      >
+      <button v-if="detail.status === 0" class="btn pay-btn" @click="goPay">
         去支付
       </button>
 
-      <button
-        v-if="detail.status === 0"
-        class="btn cancel-btn"
-        @click="handleCancel"
-      >
+      <button v-if="detail.status === 0" class="btn cancel-btn" @click="handleCancel">
         取消订单
       </button>
 
-      <button
-        v-if="detail.status === 1"
-        class="btn complete-btn"
-        @click="handleComplete"
-      >
+      <button v-if="detail.status === 1" class="btn complete-btn" @click="handleComplete">
         确认完成
       </button>
     </div>
   </div>
 </template>
-
-<script setup>
-import { onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import {
-  getOrderDetail,
-  cancelOrder,
-  completeOrder,
-  mockPay,
-} from '@/api/order'
-
-const route = useRoute()
-const router = useRouter()
-
-const defaultCover = 'https://via.placeholder.com/140x140?text=Goods'
-const detail = ref(null)
-
-const formatOrderStatus = (status) => {
-  const map = {
-    0: '待支付',
-    1: '已支付',
-    2: '已完成',
-    3: '已取消',
-    4: '超时关闭',
-  }
-  return map[status] || '未知状态'
-}
-
-const statusClass = (status) => {
-  const map = {
-    0: 'pending',
-    1: 'paid',
-    2: 'done',
-    3: 'cancel',
-    4: 'timeout',
-  }
-  return map[status] || ''
-}
-
-const loadDetail = async () => {
-  try {
-    const id = Number(route.params.id)
-    const res = await getOrderDetail(id)
-    detail.value = res?.data?.data ?? res?.data ?? res
-  } catch (error) {
-    console.error('获取订单详情失败：', error)
-    alert('获取订单详情失败')
-  }
-}
-
-const goBack = () => {
-  router.push('/my-order')
-}
-
-const handleCancel = async () => {
-  const ok = window.confirm('确定要取消该订单吗？')
-  if (!ok) return
-
-  try {
-    await cancelOrder(detail.value.id)
-    alert('取消成功')
-    loadDetail()
-  } catch (error) {
-    console.error('取消订单失败：', error)
-    const msg =
-      error?.response?.data?.msg ||
-      error?.response?.data?.message ||
-      '取消订单失败'
-    alert(msg)
-  }
-}
-
-const handleComplete = async () => {
-  const ok = window.confirm('确认已收货并完成订单吗？')
-  if (!ok) return
-
-  try {
-    await completeOrder(detail.value.id)
-    alert('订单已完成')
-    loadDetail()
-  } catch (error) {
-    console.error('确认完成失败：', error)
-    const msg =
-      error?.response?.data?.msg ||
-      error?.response?.data?.message ||
-      '确认完成失败'
-    alert(msg)
-  }
-}
-
-const handlePay = async () => {
-  const ok = window.confirm('确认支付该订单吗？')
-  if (!ok) return
-
-  try {
-    await mockPay({
-      orderId: detail.value.id,
-    })
-    alert('支付成功')
-    loadDetail()
-  } catch (error) {
-    console.error('支付失败：', error)
-    const msg =
-      error?.response?.data?.msg ||
-      error?.response?.data?.message ||
-      '支付失败'
-    alert(msg)
-  }
-}
-
-onMounted(() => {
-  loadDetail()
-})
-</script>
 
 <style scoped>
 .page {

@@ -1,18 +1,8 @@
-<script setup>
+﻿<script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { 
-  User, 
-  Phone, 
-  Location, 
-  Camera,
-  Refresh,
-  Delete,
-  Check,
-  Promotion,
-  SwitchButton
-} from '@element-plus/icons-vue'
+import { Camera, Check, Refresh, SwitchButton, User } from '@element-plus/icons-vue'
 import { ROLE_LABEL_MAP } from '@/constants/auth'
 import { OSS_UPLOAD_CATEGORY } from '@/constants/upload'
 import { useAuthStore } from '@/stores/auth'
@@ -69,23 +59,25 @@ async function loadProfile() {
 
 async function handleSave() {
   if (profileForm.name && profileForm.name.length > 20) {
-    return ElMessage.warning('昵称长度不能超过20位')
+    ElMessage.warning('昵称长度不能超过 20 个字符')
+    return
   }
+
   if (profileForm.phone && !/^1\d{10}$/.test(profileForm.phone)) {
-    return ElMessage.warning('请输入正确的11位手机号')
+    ElMessage.warning('请输入正确的 11 位手机号')
+    return
   }
 
   saving.value = true
   try {
-    const payload = {
+    await updateCurrentUserProfile({
       name: profileForm.name?.trim() || null,
       phone: profileForm.phone?.trim() || null,
       avatar: profileForm.avatar?.trim() || null,
       campus: profileForm.campus?.trim() || null,
       intro: profileForm.intro?.trim() || null,
-    }
+    })
 
-    await updateCurrentUserProfile(payload)
     await loadProfile()
     ElMessage.success('个人资料已更新')
   } catch (error) {
@@ -95,13 +87,14 @@ async function handleSave() {
   }
 }
 
+// 头像上传后先更新本地表单，用户保存时再整体提交资料
 async function handleAvatarUpload(options) {
   avatarUploading.value = true
   try {
     const avatarUrl = await uploadUserFile(options.file, OSS_UPLOAD_CATEGORY.USER_AVATAR)
     profileForm.avatar = avatarUrl
     options.onSuccess(avatarUrl)
-    ElMessage.success('头像已上传，保存后生效')
+    ElMessage.success('头像上传成功，保存后生效')
   } catch (error) {
     options.onError(error)
     ElMessage.error('图片上传失败')
@@ -112,35 +105,47 @@ async function handleAvatarUpload(options) {
 
 async function handleDeleteAccount() {
   try {
-    await ElMessageBox.confirm('注销后数据无法找回，且卖家身份无法注销。确认继续？', '危险操作', {
-      confirmButtonText: '确定注销',
-      cancelButtonText: '取消',
-      type: 'error',
-      roundButton: true
-    })
+    await ElMessageBox.confirm(
+      '注销后数据无法找回，且卖家身份账号不允许注销，确认继续吗？',
+      '危险操作',
+      {
+        confirmButtonText: '确认注销',
+        cancelButtonText: '取消',
+        type: 'error',
+      },
+    )
+
     deleting.value = true
     await deleteCurrentUserProfile()
     authStore.logout()
     ElMessage.success('账号已注销')
     router.replace('/')
-  } catch { /* Cancel */ } finally {
+  } catch {
+    // 用户取消时不做额外处理
+  } finally {
     deleting.value = false
   }
 }
 
-const handleLogout = () => {
+function handleLogout() {
   authStore.logout()
   ElMessage.success('已退出登录')
   router.push('/login')
 }
 
-onMounted(() => loadProfile())
+// 个人中心增加钱包入口，便于独立调起钱包页
+function goWalletPage() {
+  router.push('/wallet')
+}
+
+onMounted(() => {
+  loadProfile()
+})
 </script>
 
 <template>
   <div class="zz-profile-container">
     <el-card class="unified-card">
-      <!-- 顶部：头像与身份摘要 -->
       <div class="card-hero">
         <div class="avatar-wrap">
           <el-avatar :size="100" :src="profileForm.avatar || undefined">
@@ -152,44 +157,48 @@ onMounted(() => loadProfile())
             :http-request="handleAvatarUpload"
             accept="image/*"
           >
-            <el-button circle :icon="Camera" :loading="avatarUploading" size="small"></el-button>
+            <el-button circle :icon="Camera" :loading="avatarUploading" size="small" />
           </el-upload>
         </div>
+
         <div class="hero-info">
           <h2>{{ profileForm.name || '赚赚校友' }}</h2>
           <div class="hero-tags">
             <el-tag round :type="profileForm.role === 2 ? 'success' : 'info'" effect="light">
               {{ roleLabel }}
             </el-tag>
-            <span class="uid-tag">学号：{{ profileForm.studentNo }}</span>
+            <span class="uid-tag">学号：{{ profileForm.studentNo || '未填写' }}</span>
           </div>
         </div>
+
         <div class="hero-actions">
+          <el-button round type="primary" plain @click="goWalletPage">虚拟钱包</el-button>
           <el-button round :icon="Refresh" :loading="loading" @click="loadProfile">刷新</el-button>
-          <el-button round type="danger" plain :icon="SwitchButton" @click="handleLogout">退出</el-button>
+          <el-button round type="danger" plain :icon="SwitchButton" @click="handleLogout">
+            退出登录
+          </el-button>
         </div>
       </div>
 
       <el-divider />
 
-      <!-- 中部：详细表单 -->
       <div class="card-body">
         <el-form label-position="top" class="profile-form">
-          <el-row :gutter="40">
+          <el-row :gutter="24">
             <el-col :xs="24" :sm="12">
               <el-form-item label="公开昵称">
-                <el-input v-model="profileForm.name" placeholder="起个好听的名字" />
+                <el-input v-model="profileForm.name" placeholder="起一个好听的昵称" />
               </el-form-item>
             </el-col>
             <el-col :xs="24" :sm="12">
               <el-form-item label="联系电话">
-                <el-input v-model="profileForm.phone" placeholder="仅用于交易联系" />
+                <el-input v-model="profileForm.phone" placeholder="用于交易联系" />
               </el-form-item>
             </el-col>
           </el-row>
 
           <el-form-item label="所在校区">
-            <el-select v-model="profileForm.campus" placeholder="请选择您的活动校区" class="w-full">
+            <el-select v-model="profileForm.campus" placeholder="请选择校区" class="w-full" clearable>
               <el-option label="主校区" value="主校区" />
               <el-option label="东校区" value="东校区" />
               <el-option label="西校区" value="西校区" />
@@ -198,22 +207,29 @@ onMounted(() => loadProfile())
           </el-form-item>
 
           <el-form-item label="个性简介">
-            <el-input 
-              v-model="profileForm.intro" 
-              type="textarea" 
-              :rows="4" 
-              placeholder="介绍一下自己，或者您的交易偏好..."
+            <el-input
+              v-model="profileForm.intro"
+              type="textarea"
+              :rows="4"
               maxlength="200"
               show-word-limit
+              placeholder="介绍一下自己，或者你的交易偏好"
             />
           </el-form-item>
 
-          <!-- 底部：操作区 -->
           <div class="form-footer">
-            <el-button type="primary" size="large" round :icon="Check" :loading="saving" @click="handleSave" class="save-btn">
-              保存全部修改
+            <el-button
+              type="primary"
+              size="large"
+              round
+              :icon="Check"
+              :loading="saving"
+              class="save-btn"
+              @click="handleSave"
+            >
+              保存修改
             </el-button>
-            <el-button type="danger" text @click="handleDeleteAccount" :loading="deleting">
+            <el-button type="danger" text :loading="deleting" @click="handleDeleteAccount">
               注销账户
             </el-button>
           </div>
@@ -234,7 +250,6 @@ onMounted(() => loadProfile())
   padding: 20px;
 }
 
-/* Hero Header */
 .card-hero {
   display: flex;
   align-items: center;
@@ -277,9 +292,9 @@ onMounted(() => loadProfile())
 .hero-actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
-/* Card Body */
 .card-body {
   padding: 20px 0;
 }
@@ -307,12 +322,16 @@ onMounted(() => loadProfile())
     flex-direction: column;
     text-align: center;
   }
+
   .hero-tags {
     justify-content: center;
   }
+
   .hero-actions {
+    justify-content: center;
     margin-top: 16px;
   }
+
   .form-footer {
     flex-direction: column;
     gap: 20px;

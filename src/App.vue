@@ -1,34 +1,43 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-import { 
-  UserFilled, 
-  Stamp, 
-  SwitchButton, 
-  ArrowDown, 
+import {
+  UserFilled,
+  Stamp,
+  SwitchButton,
+  ArrowDown,
   Search,
-  User
+  User,
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import FloatingMessageCapsule from '@/components/FloatingMessageCapsule.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
 const isAuthPage = computed(() => ['login', 'register'].includes(route.name))
-const displayName = computed(() => authStore.user.name || authStore.user.studentNo || '用户')
+
+// TODO: 后续接聊天/通知未读接口时，改这里的硬编码数量
+const mockMessageUnreadCount = 8
+
+// TODO: 后续接真实消息中心页面时，改这里的跳转地址
+const mockMessageRoute = '/profile'
 
 const handleLogout = () => {
   authStore.logout()
   ElMessage.success('已安全退出')
   router.push('/login')
 }
+
+const handleMessageCapsuleClick = () => {
+  router.push(mockMessageRoute)
+}
 </script>
 
 <template>
   <div class="zz-app">
-    <!-- Navbar -->
     <header v-if="!isAuthPage" class="zz-navbar">
       <div class="nav-container">
         <div class="nav-left">
@@ -41,7 +50,7 @@ const handleLogout = () => {
         <div class="nav-center">
           <div class="search-bar">
             <el-input
-              placeholder="搜寻校内闲置宝贝..."
+              placeholder="搜索校内闲置宝贝..."
               :prefix-icon="Search"
               clearable
             />
@@ -51,19 +60,18 @@ const handleLogout = () => {
         <div class="nav-right">
           <div class="nav-links">
             <RouterLink to="/" :class="{ active: route.path === '/' }">首页</RouterLink>
-            <RouterLink to="/seller-auth" :class="{ active: route.path === '/seller-auth' }">认证</RouterLink>
+            <RouterLink to="/seller-auth" :class="{ active: route.path === '/seller-auth' }">
+              认证
+            </RouterLink>
           </div>
-          
+
           <el-divider direction="vertical" />
 
           <div class="user-entry">
             <template v-if="authStore.isLoggedIn">
               <el-dropdown trigger="click">
                 <div class="avatar-pill">
-                  <el-avatar 
-                    :size="28" 
-                    :src="authStore.user.avatar"
-                  >
+                  <el-avatar :size="28" :src="authStore.user.avatar">
                     <el-icon><User /></el-icon>
                   </el-avatar>
                   <el-icon><ArrowDown /></el-icon>
@@ -85,15 +93,17 @@ const handleLogout = () => {
             </template>
             <template v-else>
               <el-button text @click="router.push('/login')">登录</el-button>
-              <el-button type="primary" round size="small" @click="router.push('/register')">注册</el-button>
+              <el-button type="primary" round size="small" @click="router.push('/register')">
+                注册
+              </el-button>
             </template>
           </div>
         </div>
       </div>
     </header>
 
-    <main :class="['zz-content', { 'full': isAuthPage }]">
-      <div :class="{ 'inner': !isAuthPage }">
+    <main :class="['zz-content', { full: isAuthPage }]">
+      <div :class="{ inner: !isAuthPage }">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -101,6 +111,12 @@ const handleLogout = () => {
         </router-view>
       </div>
     </main>
+
+    <FloatingMessageCapsule
+      v-if="!isAuthPage"
+      :unread-count="mockMessageUnreadCount"
+      @click="handleMessageCapsuleClick"
+    />
   </div>
 </template>
 
@@ -216,6 +232,9 @@ const handleLogout = () => {
 }
 
 @media (max-width: 768px) {
-  .nav-center, .nav-links { display: none; }
+  .nav-center,
+  .nav-links {
+    display: none;
+  }
 }
 </style>

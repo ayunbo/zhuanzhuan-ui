@@ -86,6 +86,15 @@ function goDetail(id) {
   router.push(`/order/detail/${id}`)
 }
 
+function goReview(id) {
+  router.push({
+    path: '/review/create',
+    query: {
+      orderId: String(id),
+    },
+  })
+}
+
 function goPay(item) {
   router.push({
     path: '/pay',
@@ -203,6 +212,14 @@ onMounted(() => {
             @click="handleComplete(item.id)"
           >
             确认完成
+          </button>
+
+          <button
+            v-if="query.type === 1 && item.status === 2"
+            class="btn review-btn"
+            @click="goReview(item.id)"
+          >
+            去评价
           </button>
         </div>
       </div>
@@ -384,6 +401,11 @@ onMounted(() => {
 
 .complete-btn {
   background: #67c23a;
+  color: #fff;
+}
+
+.review-btn {
+  background: #9b6bff;
   color: #fff;
 }
 

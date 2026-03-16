@@ -1,14 +1,25 @@
 ﻿<script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { cancelOrder, completeOrder, getOrderDetail } from '@/api/order'
+import { getOrderReview } from '@/api/review'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 
 const defaultCover = 'https://via.placeholder.com/140x140?text=Goods'
 const detail = ref(null)
+const orderReview = ref(null)
+
+const canSubmitReview = computed(() => {
+  if (!detail.value) return false
+  return Number(detail.value.status) === 2
+    && !orderReview.value
+    && Number(detail.value.buyerId) === Number(authStore.user.id)
+})
 
 function formatOrderStatus(status) {
   const map = {
@@ -41,6 +52,15 @@ async function loadDetail() {
   }
 }
 
+async function loadOrderReview() {
+  try {
+    const data = await getOrderReview(Number(route.params.id))
+    orderReview.value = data || null
+  } catch {
+    orderReview.value = null
+  }
+}
+
 function goBack() {
   router.push('/my-order')
 }
@@ -65,7 +85,8 @@ async function handleCancel() {
   try {
     await cancelOrder(detail.value.id)
     ElMessage.success('订单已取消')
-    loadDetail()
+    await loadDetail()
+    await loadOrderReview()
   } catch (error) {
     ElMessage.error(error.message || '取消订单失败')
   }
@@ -78,14 +99,34 @@ async function handleComplete() {
   try {
     await completeOrder(detail.value.id)
     ElMessage.success('订单已完成')
-    loadDetail()
+    await loadDetail()
+    await loadOrderReview()
   } catch (error) {
     ElMessage.error(error.message || '确认完成失败')
   }
 }
 
-onMounted(() => {
-  loadDetail()
+function handleSubmitReview() {
+  if (!detail.value?.id) return
+  router.push({
+    path: '/review/create',
+    query: {
+      orderId: String(detail.value.id),
+    },
+  })
+}
+
+function parseReviewImages(images) {
+  if (!images) return []
+  return String(images)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+onMounted(async () => {
+  await loadDetail()
+  await loadOrderReview()
 })
 </script>
 
@@ -134,6 +175,28 @@ onMounted(() => {
       <p>关闭时间：{{ detail.closeTime || '未关闭' }}</p>
     </div>
 
+    <div class="card">
+      <h3>订单评价</h3>
+      <template v-if="orderReview">
+        <p>评分：{{ orderReview.score }} 分</p>
+        <p>匿名：{{ Number(orderReview.anonymous) === 1 ? '是' : '否' }}</p>
+        <p>内容：{{ orderReview.content || '无' }}</p>
+        <div v-if="parseReviewImages(orderReview.images).length" class="review-images">
+          <el-image
+            v-for="(url, index) in parseReviewImages(orderReview.images)"
+            :key="`review-image-${index}`"
+            :src="url"
+            :preview-src-list="parseReviewImages(orderReview.images)"
+            :initial-index="index"
+            fit="cover"
+            preview-teleported
+            class="review-thumb"
+          />
+        </div>
+      </template>
+      <p v-else>当前订单暂无评价</p>
+    </div>
+
     <div class="action-bar">
       <button v-if="detail.status === 0" class="btn pay-btn" @click="goPay">
         去支付
@@ -145,6 +208,10 @@ onMounted(() => {
 
       <button v-if="detail.status === 1" class="btn complete-btn" @click="handleComplete">
         确认完成
+      </button>
+
+      <button v-if="canSubmitReview" class="btn review-btn" @click="handleSubmitReview">
+        去评价
       </button>
     </div>
   </div>
@@ -276,5 +343,32 @@ onMounted(() => {
 .complete-btn {
   background: #67c23a;
   color: #fff;
+}
+
+.review-btn {
+  background: #9b6bff;
+  color: #fff;
+}
+
+.review-images {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.review-thumb {
+  width: 88px;
+  height: 88px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.review-thumb :deep(.el-image__inner) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: zoom-in;
 }
 </style>

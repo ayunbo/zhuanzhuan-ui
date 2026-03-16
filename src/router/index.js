@@ -118,6 +118,15 @@ const router = createRouter({
       },
     },
     {
+      path: '/review/create',
+      name: 'review-create',
+      component: () => import('@/views/ReviewCreateView.vue'),
+      meta: {
+        title: '提交评价',
+        requiresAuth: true,
+      },
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'notFound',
       component: () => import('@/views/NotFoundView.vue'),

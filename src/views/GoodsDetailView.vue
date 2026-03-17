@@ -49,7 +49,7 @@
       <div v-else class="review-list">
         <article v-for="item in reviewList" :key="item.id" class="review-card">
           <div class="review-top">
-            <strong>{{ item.reviewerName || '匿名用户' }}</strong>
+            <strong>{{ displayReviewerName(item) }}</strong>
             <span>{{ item.createTime || '--' }}</span>
           </div>
           <p class="review-score">评分：{{ item.score }} 分</p>
@@ -110,6 +110,13 @@ const parseReviewImages = (images) => {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
+}
+
+const displayReviewerName = (item) => {
+  if (Number(item?.anonymous) === 1) {
+    return '匿名'
+  }
+  return item?.reviewerName || '未知用户'
 }
 
 const loadGoods = async () => {

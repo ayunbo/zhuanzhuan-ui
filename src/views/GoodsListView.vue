@@ -37,29 +37,22 @@ const goodsList = ref([])
 
 const formatStatus = (status) => {
   if (status === 3) return '在售'
-  if (status === 4) return '已售出'
-  if (status === 5) return '已售出'
+  if (status === 4 || status === 5) return '已售出'
   return '未知状态'
 }
 
 const loadGoodsList = async () => {
   try {
     const res = await getGoodsList()
-    console.log('商品列表返回：', res)
-
     goodsList.value = res?.data?.data ?? res?.data ?? res ?? []
   } catch (error) {
-    console.error('获取商品列表失败：', error)
+    console.error('获取商品列表失败:', error)
     alert('获取商品列表失败')
   }
 }
 
 const handleCardClick = (item) => {
-  if (item.status !== 3) {
-    alert('商品已售出')
-    return
-  }
-
+  if (!item?.id) return
   router.push(`/goods/${item.id}`)
 }
 

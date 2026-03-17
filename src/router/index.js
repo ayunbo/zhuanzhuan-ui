@@ -58,6 +58,15 @@ const router = createRouter({
       },
     },
     {
+      path: '/seller/goods',
+      name: 'seller-goods',
+      component: () => import('@/views/SellerGoodsManageView.vue'),
+      meta: {
+        title: '我的商品',
+        requiresAuth: true,
+      },
+    },
+    {
       path: '/order/create',
       name: 'order-create',
       component: () => import('@/views/OrderCreateView.vue'),

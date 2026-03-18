@@ -1,5 +1,5 @@
-<script setup>
-import { computed } from 'vue'
+﻿<script setup>
+import { computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   UserFilled,
@@ -12,28 +12,56 @@ import {
 import { ElMessage } from 'element-plus'
 import FloatingMessageCapsule from '@/components/FloatingMessageCapsule.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useChatStore } from '@/stores/chat'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const chatStore = useChatStore()
 
 const isAuthPage = computed(() => ['login', 'register'].includes(route.name))
+const showMessageCapsule = computed(() => route.name === 'home' && !isAuthPage.value)
+const messageUnreadCount = computed(() => (authStore.isLoggedIn ? chatStore.unreadTotal : 0))
 
-// TODO: 后续接聊天/通知未读接口时，改这里的硬编码数量
-const mockMessageUnreadCount = 8
+async function bootstrapChatState() {
+  if (!authStore.isLoggedIn) {
+    chatStore.reset()
+    return
+  }
 
-// TODO: 后续接真实消息中心页面时，改这里的跳转地址
-const mockMessageRoute = '/profile'
+  try {
+    chatStore.connectSocket()
+    await chatStore.refreshUnreadTotal()
+  } catch {
+    // Ignore unread fetch errors in app shell.
+  }
+}
 
 const handleLogout = () => {
   authStore.logout()
+  chatStore.reset()
   ElMessage.success('已安全退出')
   router.push('/login')
 }
 
 const handleMessageCapsuleClick = () => {
-  router.push(mockMessageRoute)
+  if (!authStore.isLoggedIn) {
+    router.push({ name: 'login', query: { redirect: '/chat' } })
+    return
+  }
+  router.push('/chat')
 }
+
+onMounted(() => {
+  bootstrapChatState()
+})
+
+watch(
+  () => authStore.isLoggedIn,
+  () => {
+    bootstrapChatState()
+  },
+)
 </script>
 
 <template>
@@ -49,11 +77,7 @@ const handleMessageCapsuleClick = () => {
 
         <div class="nav-center">
           <div class="search-bar">
-            <el-input
-              placeholder="搜索校内闲置宝贝..."
-              :prefix-icon="Search"
-              clearable
-            />
+            <el-input placeholder="搜索校内闲置宝贝..." :prefix-icon="Search" clearable />
           </div>
         </div>
 
@@ -113,8 +137,8 @@ const handleMessageCapsuleClick = () => {
     </main>
 
     <FloatingMessageCapsule
-      v-if="!isAuthPage"
-      :unread-count="mockMessageUnreadCount"
+      v-if="showMessageCapsule"
+      :unread-count="messageUnreadCount"
       @click="handleMessageCapsuleClick"
     />
   </div>

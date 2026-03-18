@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+﻿import { createRouter, createWebHistory } from 'vue-router'
 import { getStoredToken } from '@/utils/auth'
 
 const router = createRouter({
@@ -49,6 +49,15 @@ const router = createRouter({
       },
     },
     {
+      path: '/chat',
+      name: 'chat',
+      component: () => import('@/views/ChatView.vue'),
+      meta: {
+        title: '聊天消息',
+        requiresAuth: true,
+      },
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'notFound',
       component: () => import('@/views/NotFoundView.vue'),
@@ -84,3 +93,5 @@ router.afterEach((to) => {
 })
 
 export default router
+
+

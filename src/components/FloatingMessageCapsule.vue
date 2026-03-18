@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed } from 'vue'
 import { ChatDotRound } from '@element-plus/icons-vue'
 
@@ -21,12 +21,7 @@ const badgeText = computed(() => {
 </script>
 
 <template>
-  <button
-    type="button"
-    class="floating-message-capsule"
-    aria-label="消息"
-    @click="emit('click')"
-  >
+  <button type="button" class="floating-message-capsule" aria-label="消息" @click="emit('click')">
     <span v-if="unreadCount > 0" class="message-badge">{{ badgeText }}</span>
     <span class="icon-wrap">
       <el-icon><ChatDotRound /></el-icon>

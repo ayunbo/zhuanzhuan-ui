@@ -69,6 +69,12 @@ const routes = [
     meta: { title: '支付中心', requiresAuth: true },
   },
   {
+    path: '/wallet',
+    name: 'wallet',
+    component: () => import('@/views/VirtualWalletView.vue'),
+    meta: { title: '虚拟钱包', requiresAuth: true },
+  },
+  {
     path: '/my-order',
     name: 'my-order',
     component: () => import('@/views/MyOrderView.vue'),

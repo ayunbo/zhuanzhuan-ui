@@ -1,37 +1,73 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { mockPay } from '@/api/order'
+import { formatCurrency } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
 
-function pick(value, fallback = '-') {
-  if (Array.isArray(value)) {
-    return pick(value[0], fallback)
-  }
-  if (value === null || value === undefined || value === '') {
-    return fallback
-  }
-  return String(value)
-}
+const submitting = ref(false)
+const payMethod = ref('mock')
 
-const paySummary = computed(() => ({
-  orderId: pick(route.query.orderId),
-  goodsTitle: pick(route.query.goodsTitle),
-  amount: pick(route.query.amount),
-  source: pick(route.query.source, '订单创建后跳转'),
-}))
+const orderId = computed(() => {
+  const raw = Array.isArray(route.query.orderId) ? route.query.orderId[0] : route.query.orderId
+  const id = Number(raw)
+  return Number.isFinite(id) && id > 0 ? id : null
+})
+
+const goodsTitle = computed(() => {
+  const value = Array.isArray(route.query.goodsTitle) ? route.query.goodsTitle[0] : route.query.goodsTitle
+  return value || '当前订单商品'
+})
+
+const amountText = computed(() => formatCurrency(route.query.amount || 0))
+
+async function handlePay() {
+  if (!orderId.value) {
+    ElMessage.warning('缺少订单编号')
+    return
+  }
+
+  if (payMethod.value === 'wallet') {
+    router.push({
+      path: '/wallet',
+      query: {
+        orderId: String(orderId.value),
+        goodsTitle: goodsTitle.value,
+        amount: String(route.query.amount || ''),
+      },
+    })
+    return
+  }
+
+  submitting.value = true
+  try {
+    // 中文注释：模拟支付仍然沿用原有后端接口，保持你原来的测试流程不变。
+    await mockPay({
+      orderId: orderId.value,
+      requestNo: null,
+    })
+    ElMessage.success('模拟支付成功')
+    router.push(`/order/detail/${orderId.value}`)
+  } catch (error) {
+    ElMessage.error(error.message || '支付失败')
+  } finally {
+    submitting.value = false
+  }
+}
 </script>
 
 <template>
   <div class="pay-page zz-page">
     <section class="page-head zz-card">
       <div class="head-copy">
-        <p>PAYMENT SHELL</p>
-        <h1>支付页</h1>
-        <span>支付通道尚未接入，当前仅展示从路由读取到的订单摘要。</span>
+        <p>PAYMENT CENTER</p>
+        <h1>支付中心</h1>
+        <span>请选择当前订单的支付方式。模拟支付保持原流程，虚拟钱包支付会跳转到独立钱包页。</span>
       </div>
-      <el-tag round type="warning">待接入</el-tag>
+      <el-tag round type="success">已接入</el-tag>
     </section>
 
     <div class="pay-layout zz-two-column">
@@ -40,8 +76,8 @@ const paySummary = computed(() => ({
           <template #header>
             <div class="panel-head">
               <div>
-                <h2>支付信息</h2>
-                <p>金额和商品名称来自路由参数，当前不会发起真实支付请求。</p>
+                <h2>订单摘要</h2>
+                <p>确认商品和金额无误后，再继续选择支付方式。</p>
               </div>
             </div>
           </template>
@@ -49,19 +85,19 @@ const paySummary = computed(() => ({
           <div class="info-grid">
             <div>
               <label>订单 ID</label>
-              <p>{{ paySummary.orderId }}</p>
+              <p>{{ orderId || '--' }}</p>
             </div>
             <div>
               <label>商品名称</label>
-              <p>{{ paySummary.goodsTitle }}</p>
+              <p>{{ goodsTitle }}</p>
             </div>
             <div>
               <label>应付金额</label>
-              <p class="price">￥{{ paySummary.amount }}</p>
+              <p class="price">{{ amountText }}</p>
             </div>
             <div>
-              <label>来源</label>
-              <p>{{ paySummary.source }}</p>
+              <label>支付状态</label>
+              <p>待支付</p>
             </div>
           </div>
         </el-card>
@@ -71,39 +107,50 @@ const paySummary = computed(() => ({
         <el-card class="panel-card" shadow="never">
           <template #header>
             <div class="panel-head">
-              <h3>接入说明</h3>
-              <el-tag round>只读</el-tag>
+              <h3>支付方式</h3>
+              <el-tag round>必选</el-tag>
             </div>
           </template>
 
-          <ol class="step-list">
-            <li>
-              <strong>订单信息已读取</strong>
-              <span>只保留商品名、金额和订单号等最少字段。</span>
-            </li>
-            <li>
-              <strong>支付通道未上线</strong>
-              <span>当前不放任何二维码、按钮或伪支付流程。</span>
-            </li>
-            <li>
-              <strong>回跳订单中心</strong>
-              <span>后续接入真正的支付后，再恢复完整交互。</span>
-            </li>
-          </ol>
+          <div class="method-list">
+            <button
+              type="button"
+              class="method-item"
+              :class="{ 'is-active': payMethod === 'mock' }"
+              @click="payMethod = 'mock'"
+            >
+              <strong>模拟支付</strong>
+              <span>保持原有测试链路，直接调用后端模拟支付接口。</span>
+            </button>
+
+            <button
+              type="button"
+              class="method-item"
+              :class="{ 'is-active': payMethod === 'wallet' }"
+              @click="payMethod = 'wallet'"
+            >
+              <strong>虚拟钱包支付</strong>
+              <span>进入独立钱包页，登录钱包账户后选择余额或银行卡支付。</span>
+            </button>
+          </div>
+
+          <el-button type="primary" class="submit-btn" :loading="submitting" @click="handlePay">
+            {{ payMethod === 'wallet' ? '前往虚拟钱包页' : submitting ? '支付中...' : '立即支付' }}
+          </el-button>
         </el-card>
 
         <el-alert
           title="提示"
-          type="warning"
+          type="info"
           :closable="false"
           show-icon
-          description="这是支付页的正式壳子，当前只负责展示和返回。"
+          description="如果你选择虚拟钱包支付，系统会先跳转到钱包页，再由钱包页读取当前订单并完成付款。"
         />
       </aside>
     </div>
 
     <div class="page-actions">
-      <el-button type="primary" @click="router.push('/my-order')">返回订单中心</el-button>
+      <el-button @click="router.push('/my-order')">返回订单中心</el-button>
     </div>
   </div>
 </template>
@@ -174,6 +221,39 @@ const paySummary = computed(() => ({
   font-size: 13px;
 }
 
+.method-list {
+  display: grid;
+  gap: 12px;
+}
+
+.method-item {
+  width: 100%;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--zz-border);
+  background: #fafafa;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+}
+
+.method-item.is-active {
+  border-color: var(--zz-yellow);
+  background: #fffaf0;
+}
+
+.method-item strong {
+  font-size: 16px;
+  color: var(--zz-black);
+}
+
+.method-item span {
+  color: var(--zz-text-secondary);
+  line-height: 1.55;
+  font-size: 13px;
+}
+
 .info-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -206,32 +286,14 @@ const paySummary = computed(() => ({
   color: #222 !important;
 }
 
-.step-list {
-  margin: 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 12px;
-}
-
-.step-list li {
-  display: grid;
-  gap: 4px;
-}
-
-.step-list strong {
-  font-size: 14px;
-  color: var(--zz-black);
-}
-
-.step-list span {
-  color: var(--zz-text-secondary);
-  font-size: 13px;
-  line-height: 1.55;
-}
-
 .pay-side {
   display: grid;
   gap: 16px;
+}
+
+.submit-btn {
+  width: 100%;
+  margin-top: 16px;
 }
 
 .page-actions {

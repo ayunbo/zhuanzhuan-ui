@@ -1,28 +1,102 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { cancelOrder, completeOrder, getOrderDetail } from '@/api/order'
+import { formatCurrency, formatDateTime } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
 
-function pick(value, fallback = '-') {
-  if (Array.isArray(value)) {
-    return pick(value[0], fallback)
-  }
-  if (value === null || value === undefined || value === '') {
-    return fallback
-  }
-  return String(value)
+const loading = ref(false)
+const orderDetail = ref(null)
+
+const orderId = computed(() => {
+  const raw = Array.isArray(route.params.id) ? route.params.id[0] : route.params.id
+  const id = Number(raw)
+  return Number.isFinite(id) && id > 0 ? id : null
+})
+
+const statusTextMap = {
+  0: '待支付',
+  1: '已支付',
+  2: '已完成',
+  3: '已取消',
+  4: '超时关闭',
 }
 
-const orderSummary = computed(() => ({
-  orderId: pick(route.params.id),
-  orderNo: pick(route.query.orderNo),
-  goodsTitle: pick(route.query.goodsTitle),
-  amount: pick(route.query.amount),
-  status: pick(route.query.status, '待接入'),
-  source: pick(route.query.source, '路由直达'),
-}))
+const statusText = computed(() => statusTextMap[orderDetail.value?.status] || '未知状态')
+
+function getTagType(status) {
+  if (status === 0) return 'warning'
+  if (status === 1) return 'success'
+  if (status === 2) return ''
+  if (status === 3 || status === 4) return 'info'
+  return 'info'
+}
+
+async function loadOrderDetail() {
+  if (!orderId.value) {
+    ElMessage.warning('缺少订单编号')
+    router.replace('/my-order')
+    return
+  }
+
+  loading.value = true
+  try {
+    orderDetail.value = await getOrderDetail(orderId.value)
+  } catch (error) {
+    ElMessage.error(error.message || '订单详情加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function goPay() {
+  if (!orderDetail.value) return
+  router.push({
+    path: '/pay',
+    query: {
+      orderId: String(orderDetail.value.id),
+      goodsTitle: orderDetail.value.goodsTitle || '',
+      amount: String(orderDetail.value.amount || ''),
+    },
+  })
+}
+
+async function handleCancel() {
+  if (!orderDetail.value) return
+  try {
+    await ElMessageBox.confirm('确认取消当前订单吗？', '取消订单', {
+      confirmButtonText: '确认取消',
+      cancelButtonText: '再想想',
+      type: 'warning',
+    })
+    await cancelOrder(orderDetail.value.id)
+    ElMessage.success('订单已取消')
+    loadOrderDetail()
+  } catch {
+    // ignore
+  }
+}
+
+async function handleComplete() {
+  if (!orderDetail.value) return
+  try {
+    await ElMessageBox.confirm('确认交易已经完成吗？', '确认完成', {
+      confirmButtonText: '确认完成',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    await completeOrder(orderDetail.value.id)
+    ElMessage.success('订单已完成')
+    loadOrderDetail()
+  } catch {
+    // ignore
+  }
+}
+
+onMounted(loadOrderDetail)
 </script>
 
 <template>
@@ -31,31 +105,59 @@ const orderSummary = computed(() => ({
       <div class="head-copy">
         <p>ORDER DETAIL</p>
         <h1>订单详情</h1>
-        <span>当前仅展示路由带入的最少字段，后端接入后再补充完整详情和状态流转。</span>
+        <span>这里展示订单的真实详情信息，包括金额、见面时间、联系人和当前订单状态。</span>
       </div>
-      <el-tag round type="warning">待接入</el-tag>
+      <el-tag round type="success">已接入</el-tag>
     </section>
 
     <div class="detail-layout zz-two-column">
       <main class="detail-main">
-        <el-card class="detail-card" shadow="never">
+        <el-card v-loading="loading" class="detail-card" shadow="never">
           <template #header>
             <div class="panel-head">
               <div>
                 <h2>基础信息</h2>
-                <p>所有内容都来自路由参数，没有额外请求和假数据。</p>
+                <p>以下内容全部来自订单详情接口。</p>
               </div>
             </div>
           </template>
 
-          <el-descriptions :column="2" border>
-            <el-descriptions-item label="订单 ID">{{ orderSummary.orderId }}</el-descriptions-item>
-            <el-descriptions-item label="订单号">{{ orderSummary.orderNo }}</el-descriptions-item>
-            <el-descriptions-item label="商品名称">{{ orderSummary.goodsTitle }}</el-descriptions-item>
-            <el-descriptions-item label="金额">￥{{ orderSummary.amount }}</el-descriptions-item>
-            <el-descriptions-item label="状态">{{ orderSummary.status }}</el-descriptions-item>
-            <el-descriptions-item label="来源">{{ orderSummary.source }}</el-descriptions-item>
-          </el-descriptions>
+          <template v-if="orderDetail">
+            <div class="hero-row">
+              <div class="goods-block">
+                <img v-if="orderDetail.goodsCover" :src="orderDetail.goodsCover" :alt="orderDetail.goodsTitle" />
+                <div v-else class="cover-empty">暂无封面</div>
+                <div>
+                  <h3>{{ orderDetail.goodsTitle || '当前商品' }}</h3>
+                  <p>订单号：{{ orderDetail.orderNo }}</p>
+                </div>
+              </div>
+              <el-tag round :type="getTagType(orderDetail.status)">{{ statusText }}</el-tag>
+            </div>
+
+            <el-descriptions :column="2" border>
+              <el-descriptions-item label="订单 ID">{{ orderDetail.id }}</el-descriptions-item>
+              <el-descriptions-item label="订单金额">{{ formatCurrency(orderDetail.amount) }}</el-descriptions-item>
+              <el-descriptions-item label="交易地点">{{ orderDetail.meetLocation || '未填写' }}</el-descriptions-item>
+              <el-descriptions-item label="交易时间">{{ formatDateTime(orderDetail.meetTime) }}</el-descriptions-item>
+              <el-descriptions-item label="买家">{{ orderDetail.buyerName || '未返回' }}</el-descriptions-item>
+              <el-descriptions-item label="买家电话">{{ orderDetail.buyerPhone || '未返回' }}</el-descriptions-item>
+              <el-descriptions-item label="卖家">{{ orderDetail.sellerName || '未返回' }}</el-descriptions-item>
+              <el-descriptions-item label="卖家电话">{{ orderDetail.sellerPhone || '未返回' }}</el-descriptions-item>
+              <el-descriptions-item label="创建时间">{{ formatDateTime(orderDetail.createTime) }}</el-descriptions-item>
+              <el-descriptions-item label="支付时间">{{ formatDateTime(orderDetail.payTime) }}</el-descriptions-item>
+              <el-descriptions-item label="关闭时间">{{ formatDateTime(orderDetail.closeTime) }}</el-descriptions-item>
+              <el-descriptions-item label="完成时间">{{ formatDateTime(orderDetail.completeTime) }}</el-descriptions-item>
+              <el-descriptions-item label="备注说明" :span="2">{{ orderDetail.remark || '无' }}</el-descriptions-item>
+            </el-descriptions>
+
+            <div class="action-row">
+              <el-button @click="router.push('/my-order')">返回订单中心</el-button>
+              <el-button v-if="orderDetail.status === 0" type="primary" @click="goPay">去支付</el-button>
+              <el-button v-if="orderDetail.status === 0" danger plain @click="handleCancel">取消订单</el-button>
+              <el-button v-if="orderDetail.status === 1" type="success" @click="handleComplete">确认完成</el-button>
+            </div>
+          </template>
         </el-card>
       </main>
 
@@ -70,16 +172,16 @@ const orderSummary = computed(() => ({
 
           <ol class="step-list">
             <li>
-              <strong>详情字段已读取</strong>
-              <span>订单号、商品名、金额、状态和来源都来自路由。</span>
+              <strong>详情已接入</strong>
+              <span>订单主信息、快照信息和买卖双方联系方式都来自后端接口。</span>
             </li>
             <li>
-              <strong>订单操作未接入</strong>
-              <span>当前不提供取消、支付或完成等伪按钮。</span>
+              <strong>状态操作已接入</strong>
+              <span>待支付订单可以继续支付或取消，已支付订单可以确认完成。</span>
             </li>
             <li>
-              <strong>后续补真实接口</strong>
-              <span>等后端返回完整详情后，再补充物流和状态历史。</span>
+              <strong>保持真实链路</strong>
+              <span>这里不会展示假数据，页面行为完全跟随后端订单状态变化。</span>
             </li>
           </ol>
         </el-card>
@@ -89,13 +191,9 @@ const orderSummary = computed(() => ({
           type="info"
           :closable="false"
           show-icon
-          description="这是订单详情的正式壳子，当前仅保留路由读取和返回入口。"
+          description="如果管理员在后台修改了当前订单状态，刷新本页后也会同步看到最新结果。"
         />
       </aside>
-    </div>
-
-    <div class="page-actions">
-      <el-button type="primary" @click="router.push('/my-order')">返回订单中心</el-button>
     </div>
   </div>
 </template>
@@ -146,6 +244,45 @@ const orderSummary = computed(() => ({
   border-radius: 24px;
 }
 
+.hero-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.goods-block {
+  display: flex;
+  gap: 14px;
+}
+
+.goods-block img,
+.cover-empty {
+  width: 108px;
+  height: 108px;
+  border-radius: 18px;
+  background: #f2f2f2;
+  object-fit: cover;
+}
+
+.cover-empty {
+  display: grid;
+  place-items: center;
+  color: var(--zz-text-light);
+  font-size: 13px;
+}
+
+.goods-block h3 {
+  font-size: 22px;
+  color: var(--zz-black);
+}
+
+.goods-block p {
+  margin-top: 8px;
+  color: var(--zz-text-secondary);
+}
+
 .panel-head {
   display: flex;
   align-items: flex-start;
@@ -194,7 +331,8 @@ const orderSummary = computed(() => ({
   gap: 16px;
 }
 
-.page-actions {
+.action-row {
+  margin-top: 18px;
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
@@ -212,7 +350,14 @@ const orderSummary = computed(() => ({
     flex-direction: column;
   }
 
-  .page-actions {
+  .hero-row,
+  .goods-block,
+  .action-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .action-row {
     display: grid;
     grid-template-columns: 1fr;
   }

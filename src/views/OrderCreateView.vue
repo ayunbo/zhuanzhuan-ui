@@ -1,74 +1,142 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { fetchPublicGoodsById } from '@/api/goods'
+import { submitOrder } from '@/api/order'
+import { formatCurrency } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
 
-function pick(value, fallback = '-') {
-  if (Array.isArray(value)) {
-    return pick(value[0], fallback)
-  }
-  if (value === null || value === undefined || value === '') {
-    return fallback
-  }
-  return String(value)
-}
+const loading = ref(false)
+const submitting = ref(false)
+const goodsDetail = ref(null)
 
-const goodsDraft = computed(() => ({
-  goodsId: pick(route.query.goodsId),
-  goodsTitle: pick(route.query.goodsTitle),
-  goodsCover: pick(route.query.goodsCover, ''),
-  amount: pick(route.query.amount),
-  sellerName: pick(route.query.sellerName),
-  location: pick(route.query.location),
-  source: pick(route.query.source, '商品详情'),
-}))
+const form = reactive({
+  meetLocation: '',
+  meetTime: '',
+  remark: '',
+})
+
+const goodsId = computed(() => {
+  const raw = Array.isArray(route.query.goodsId) ? route.query.goodsId[0] : route.query.goodsId
+  const id = Number(raw)
+  return Number.isFinite(id) && id > 0 ? id : null
+})
+
+const sellerName = computed(() => goodsDetail.value?.sellerName || route.query.sellerName || '校园卖家')
+const orderAmount = computed(() => formatCurrency(goodsDetail.value?.price || route.query.amount || 0))
 
 function goBack() {
-  const id = goodsDraft.value.goodsId
-  if (id && id !== '-') {
-    router.push(`/goods/${id}`)
+  if (goodsId.value) {
+    router.push(`/goods/${goodsId.value}`)
+    return
+  }
+  router.push('/goods')
+}
+
+async function loadGoodsDetail() {
+  if (!goodsId.value) {
+    ElMessage.warning('缺少商品信息，无法创建订单')
+    router.replace('/goods')
     return
   }
 
-  router.push('/goods')
+  loading.value = true
+  try {
+    goodsDetail.value = await fetchPublicGoodsById(goodsId.value)
+    if (!form.meetLocation && goodsDetail.value?.location) {
+      form.meetLocation = goodsDetail.value.location
+    }
+  } catch (error) {
+    ElMessage.error(error.message || '商品信息加载失败')
+  } finally {
+    loading.value = false
+  }
 }
+
+async function handleSubmitOrder() {
+  if (!goodsId.value) {
+    ElMessage.warning('缺少商品编号')
+    return
+  }
+  if (!form.meetLocation.trim()) {
+    ElMessage.warning('请填写交易地点')
+    return
+  }
+  if (!form.meetTime) {
+    ElMessage.warning('请选择交易时间')
+    return
+  }
+
+  submitting.value = true
+  try {
+    // 中文注释：根据当前后端反序列化表现，这里提交“yyyy-MM-dd HH:mm”格式最稳妥。
+    const orderId = await submitOrder({
+      goodsId: goodsId.value,
+      meetLocation: form.meetLocation.trim(),
+      meetTime: form.meetTime,
+      remark: form.remark.trim() || null,
+    })
+
+    ElMessage.success('订单创建成功，请继续完成支付')
+    router.push({
+      path: '/pay',
+      query: {
+        orderId: String(orderId),
+        goodsTitle: goodsDetail.value?.title || '',
+        amount: String(goodsDetail.value?.price || ''),
+      },
+    })
+  } catch (error) {
+    ElMessage.error(error.message || '创建订单失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
+onMounted(loadGoodsDetail)
 </script>
 
 <template>
   <div class="order-page zz-page">
     <section class="page-head zz-card">
       <div class="head-copy">
-        <p>ORDER DRAFT</p>
+        <p>ORDER CREATE</p>
         <h1>创建订单</h1>
-        <span>页面已搭好，只保留从路由带入的真实商品信息，不会发起任何下单请求。</span>
+        <span>确认交易地点和见面时间后提交订单，系统会锁定商品并进入支付流程。</span>
       </div>
-      <el-tag round type="warning">待接入</el-tag>
+      <el-tag round type="success">已接入</el-tag>
     </section>
 
     <div class="order-layout zz-two-column">
       <main class="order-main">
         <el-card class="preview-card" shadow="never">
           <div class="preview-media">
-            <img v-if="goodsDraft.goodsCover && goodsDraft.goodsCover !== '-'" :src="goodsDraft.goodsCover" alt="商品封面" />
-            <div v-else class="preview-empty">商品封面占位</div>
+            <img v-if="goodsDetail?.cover" :src="goodsDetail.cover" alt="商品封面" />
+            <div v-else class="preview-empty">暂无商品封面</div>
           </div>
 
           <div class="preview-copy">
             <div class="preview-title">
-              <h2>{{ goodsDraft.goodsTitle }}</h2>
-              <span>来源：{{ goodsDraft.source }}</span>
+              <h2>{{ goodsDetail?.title || route.query.goodsTitle || '当前商品' }}</h2>
+              <span>卖家：{{ sellerName }}</span>
             </div>
 
             <div class="price-row">
-              <strong>￥{{ goodsDraft.amount }}</strong>
+              <strong>{{ orderAmount }}</strong>
               <span>订单金额</span>
             </div>
 
             <div class="preview-tags">
-              <el-tag round>{{ goodsDraft.sellerName }}</el-tag>
-              <el-tag round type="info">{{ goodsDraft.location }}</el-tag>
+              <el-tag round>{{ goodsDetail?.categoryName || '校园闲置' }}</el-tag>
+              <el-tag round type="info">{{ goodsDetail?.location || '校内当面交易' }}</el-tag>
+            </div>
+
+            <div class="desc-box">
+              <h3>商品说明</h3>
+              <p>{{ goodsDetail?.detail || '卖家暂未补充更多说明。' }}</p>
             </div>
           </div>
         </el-card>
@@ -78,66 +146,55 @@ function goBack() {
         <el-card class="panel-card" shadow="never">
           <template #header>
             <div class="panel-head">
-              <h3>路由信息</h3>
-              <el-tag round>只读</el-tag>
+              <h3>订单信息</h3>
+              <el-tag round>{{ goodsId || '--' }}</el-tag>
             </div>
           </template>
 
-          <dl class="info-list">
-            <div>
-              <dt>商品 ID</dt>
-              <dd>{{ goodsDraft.goodsId }}</dd>
-            </div>
-            <div>
-              <dt>商品标题</dt>
-              <dd>{{ goodsDraft.goodsTitle }}</dd>
-            </div>
-            <div>
-              <dt>卖家</dt>
-              <dd>{{ goodsDraft.sellerName }}</dd>
-            </div>
-            <div>
-              <dt>交易地点</dt>
-              <dd>{{ goodsDraft.location }}</dd>
-            </div>
-          </dl>
-        </el-card>
+          <el-form label-position="top" class="order-form">
+            <el-form-item label="交易地点">
+              <el-input v-model="form.meetLocation" placeholder="例如：主教学楼一层大厅" />
+            </el-form-item>
 
-        <el-card class="panel-card" shadow="never">
-          <template #header>
-            <div class="panel-head">
-              <h3>接入说明</h3>
-            </div>
-          </template>
+            <el-form-item label="交易时间">
+              <el-date-picker
+                v-model="form.meetTime"
+                type="datetime"
+                value-format="YYYY-MM-DD HH:mm"
+                placeholder="请选择交易时间"
+                class="full-width"
+              />
+            </el-form-item>
 
-          <ol class="step-list">
-            <li>
-              <strong>商品信息已读取</strong>
-              <span>标题、封面、金额和卖家均来自路由参数。</span>
-            </li>
-            <li>
-              <strong>订单接口未接入</strong>
-              <span>当前不提交订单，不模拟支付，也不造假列表。</span>
-            </li>
-            <li>
-              <strong>后续只补真实链路</strong>
-              <span>等后端打通后，再把这里接成正式下单页。</span>
-            </li>
-          </ol>
+            <el-form-item label="备注说明">
+              <el-input
+                v-model="form.remark"
+                type="textarea"
+                :rows="4"
+                maxlength="120"
+                show-word-limit
+                placeholder="可填写楼号、到达方式或补充说明"
+              />
+            </el-form-item>
+
+            <el-button type="primary" class="submit-btn" :loading="submitting" @click="handleSubmitOrder">
+              {{ submitting ? '提交中...' : '提交订单并去支付' }}
+            </el-button>
+          </el-form>
         </el-card>
 
         <el-alert
           title="提示"
-          type="warning"
+          type="info"
           :closable="false"
           show-icon
-          description="这是一个正式壳子页面，当前只保留路由带入的信息和返回能力。"
+          description="订单提交成功后会自动进入支付页，待支付订单 30 分钟内未支付会被系统自动关闭。"
         />
       </aside>
     </div>
 
     <div class="page-actions">
-      <el-button type="primary" @click="goBack">返回商品详情</el-button>
+      <el-button @click="goBack">返回商品详情</el-button>
     </div>
   </div>
 </template>
@@ -258,6 +315,26 @@ function goBack() {
   gap: 8px;
 }
 
+.desc-box {
+  padding: 16px;
+  border-radius: 20px;
+  background: #fafafa;
+  border: 1px solid var(--zz-border);
+  display: grid;
+  gap: 8px;
+}
+
+.desc-box h3 {
+  font-size: 18px;
+  color: var(--zz-black);
+}
+
+.desc-box p {
+  color: var(--zz-text-secondary);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
 .order-side {
   display: grid;
   gap: 16px;
@@ -275,54 +352,16 @@ function goBack() {
   color: var(--zz-black);
 }
 
-.info-list {
-  margin: 0;
+.order-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
 }
 
-.info-list div {
-  border-radius: 16px;
-  border: 1px solid var(--zz-border);
-  background: #fafafa;
-  padding: 12px;
+.full-width {
+  width: 100%;
 }
 
-.info-list dt {
-  font-size: 12px;
-  color: var(--zz-text-light);
-}
-
-.info-list dd {
-  margin-top: 6px;
-  color: var(--zz-black);
-  font-weight: 600;
-  line-height: 1.45;
-  word-break: break-all;
-}
-
-.step-list {
-  margin: 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 12px;
-}
-
-.step-list li {
-  display: grid;
-  gap: 4px;
-}
-
-.step-list strong {
-  font-size: 14px;
-  color: var(--zz-black);
-}
-
-.step-list span {
-  color: var(--zz-text-secondary);
-  font-size: 13px;
-  line-height: 1.55;
+.submit-btn {
+  width: 100%;
 }
 
 .page-actions {
@@ -341,10 +380,6 @@ function goBack() {
   .page-head {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .info-list {
-    grid-template-columns: 1fr;
   }
 
   .page-actions {

@@ -3,4 +3,5 @@ export const OSS_UPLOAD_CATEGORY = {
   REVIEW: 'review',
   USER_AVATAR: 'user/avatar',
   SELLER_AUTH_MATERIAL: 'user/seller-auth',
+  GOODS_IMAGE: 'goods/image',
 }

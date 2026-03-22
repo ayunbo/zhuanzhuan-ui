@@ -1,374 +1,220 @@
-﻿<script setup>
-import { computed, onMounted, ref } from 'vue'
+<script setup>
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { cancelOrder, completeOrder, getOrderDetail } from '@/api/order'
-import { getOrderReview } from '@/api/review'
-import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
-const authStore = useAuthStore()
 
-const defaultCover = 'https://via.placeholder.com/140x140?text=Goods'
-const detail = ref(null)
-const orderReview = ref(null)
-
-const canSubmitReview = computed(() => {
-  if (!detail.value) return false
-  return Number(detail.value.status) === 2
-    && !orderReview.value
-    && Number(detail.value.buyerId) === Number(authStore.user.id)
-})
-
-function formatOrderStatus(status) {
-  const map = {
-    0: '待支付',
-    1: '已支付',
-    2: '已完成',
-    3: '已取消',
-    4: '超时关闭',
+function pick(value, fallback = '-') {
+  if (Array.isArray(value)) {
+    return pick(value[0], fallback)
   }
-  return map[status] || '未知状态'
-}
-
-function statusClass(status) {
-  const map = {
-    0: 'pending',
-    1: 'paid',
-    2: 'done',
-    3: 'cancel',
-    4: 'timeout',
+  if (value === null || value === undefined || value === '') {
+    return fallback
   }
-  return map[status] || ''
+  return String(value)
 }
 
-async function loadDetail() {
-  try {
-    const data = await getOrderDetail(Number(route.params.id))
-    detail.value = data
-  } catch (error) {
-    ElMessage.error(error.message || '获取订单详情失败')
-  }
-}
-
-async function loadOrderReview() {
-  try {
-    const data = await getOrderReview(Number(route.params.id))
-    orderReview.value = data || null
-  } catch {
-    orderReview.value = null
-  }
-}
-
-function goBack() {
-  router.push('/my-order')
-}
-
-function goPay() {
-  if (!detail.value?.id) return
-
-  router.push({
-    path: '/pay',
-    query: {
-      orderId: String(detail.value.id),
-      goodsTitle: detail.value.goodsTitle || '',
-      amount: detail.value.amount || detail.value.goodsPrice || '',
-    },
-  })
-}
-
-async function handleCancel() {
-  const ok = window.confirm('确定要取消该订单吗？')
-  if (!ok) return
-
-  try {
-    await cancelOrder(detail.value.id)
-    ElMessage.success('订单已取消')
-    await loadDetail()
-    await loadOrderReview()
-  } catch (error) {
-    ElMessage.error(error.message || '取消订单失败')
-  }
-}
-
-async function handleComplete() {
-  const ok = window.confirm('确认已收货并完成订单吗？')
-  if (!ok) return
-
-  try {
-    await completeOrder(detail.value.id)
-    ElMessage.success('订单已完成')
-    await loadDetail()
-    await loadOrderReview()
-  } catch (error) {
-    ElMessage.error(error.message || '确认完成失败')
-  }
-}
-
-function handleSubmitReview() {
-  if (!detail.value?.id) return
-  router.push({
-    path: '/review/create',
-    query: {
-      orderId: String(detail.value.id),
-    },
-  })
-}
-
-function parseReviewImages(images) {
-  if (!images) return []
-  return String(images)
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-onMounted(async () => {
-  await loadDetail()
-  await loadOrderReview()
-})
+const orderSummary = computed(() => ({
+  orderId: pick(route.params.id),
+  orderNo: pick(route.query.orderNo),
+  goodsTitle: pick(route.query.goodsTitle),
+  amount: pick(route.query.amount),
+  status: pick(route.query.status, '待接入'),
+  source: pick(route.query.source, '路由直达'),
+}))
 </script>
 
 <template>
-  <div v-if="detail" class="page">
-    <div class="header">
-      <h2>订单详情</h2>
-      <button class="back-btn" @click="goBack">返回订单列表</button>
-    </div>
-
-    <div class="card">
-      <div class="goods-section">
-        <img :src="detail.goodsCover || defaultCover" class="cover" />
-        <div class="goods-info">
-          <h3>{{ detail.goodsTitle }}</h3>
-          <p>订单号：{{ detail.orderNo }}</p>
-          <p>商品价格：￥{{ detail.goodsPrice }}</p>
-          <p>
-            订单状态：
-            <span class="status" :class="statusClass(detail.status)">
-              {{ formatOrderStatus(detail.status) }}
-            </span>
-          </p>
-        </div>
+  <div class="detail-page zz-page">
+    <section class="page-head zz-card">
+      <div class="head-copy">
+        <p>ORDER DETAIL</p>
+        <h1>订单详情</h1>
+        <span>当前仅展示路由带入的最少字段，后端接入后再补充完整详情和状态流转。</span>
       </div>
+      <el-tag round type="warning">待接入</el-tag>
+    </section>
+
+    <div class="detail-layout zz-two-column">
+      <main class="detail-main">
+        <el-card class="detail-card" shadow="never">
+          <template #header>
+            <div class="panel-head">
+              <div>
+                <h2>基础信息</h2>
+                <p>所有内容都来自路由参数，没有额外请求和假数据。</p>
+              </div>
+            </div>
+          </template>
+
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="订单 ID">{{ orderSummary.orderId }}</el-descriptions-item>
+            <el-descriptions-item label="订单号">{{ orderSummary.orderNo }}</el-descriptions-item>
+            <el-descriptions-item label="商品名称">{{ orderSummary.goodsTitle }}</el-descriptions-item>
+            <el-descriptions-item label="金额">￥{{ orderSummary.amount }}</el-descriptions-item>
+            <el-descriptions-item label="状态">{{ orderSummary.status }}</el-descriptions-item>
+            <el-descriptions-item label="来源">{{ orderSummary.source }}</el-descriptions-item>
+          </el-descriptions>
+        </el-card>
+      </main>
+
+      <aside class="detail-side">
+        <el-card class="panel-card" shadow="never">
+          <template #header>
+            <div class="panel-head">
+              <h3>接入说明</h3>
+              <el-tag round>只读</el-tag>
+            </div>
+          </template>
+
+          <ol class="step-list">
+            <li>
+              <strong>详情字段已读取</strong>
+              <span>订单号、商品名、金额、状态和来源都来自路由。</span>
+            </li>
+            <li>
+              <strong>订单操作未接入</strong>
+              <span>当前不提供取消、支付或完成等伪按钮。</span>
+            </li>
+            <li>
+              <strong>后续补真实接口</strong>
+              <span>等后端返回完整详情后，再补充物流和状态历史。</span>
+            </li>
+          </ol>
+        </el-card>
+
+        <el-alert
+          title="提示"
+          type="info"
+          :closable="false"
+          show-icon
+          description="这是订单详情的正式壳子，当前仅保留路由读取和返回入口。"
+        />
+      </aside>
     </div>
 
-    <div class="card">
-      <h3>交易信息</h3>
-      <p>交易地点：{{ detail.meetLocation || '未填写' }}</p>
-      <p>交易时间：{{ detail.meetTime || '未填写' }}</p>
-      <p>备注：{{ detail.remark || '无' }}</p>
-    </div>
-
-    <div class="card">
-      <h3>买卖双方信息</h3>
-      <p>买家：{{ detail.buyerName || '未记录' }} / {{ detail.buyerPhone || '未记录' }}</p>
-      <p>卖家：{{ detail.sellerName || '未记录' }} / {{ detail.sellerPhone || '未记录' }}</p>
-    </div>
-
-    <div class="card">
-      <h3>时间信息</h3>
-      <p>创建时间：{{ detail.createTime || '未记录' }}</p>
-      <p>支付时间：{{ detail.payTime || '未支付' }}</p>
-      <p>完成时间：{{ detail.completeTime || '未完成' }}</p>
-      <p>关闭时间：{{ detail.closeTime || '未关闭' }}</p>
-    </div>
-
-    <div class="card">
-      <h3>订单评价</h3>
-      <template v-if="orderReview">
-        <p>评分：{{ orderReview.score }} 分</p>
-        <p>匿名：{{ Number(orderReview.anonymous) === 1 ? '是' : '否' }}</p>
-        <p>内容：{{ orderReview.content || '无' }}</p>
-        <div v-if="parseReviewImages(orderReview.images).length" class="review-images">
-          <el-image
-            v-for="(url, index) in parseReviewImages(orderReview.images)"
-            :key="`review-image-${index}`"
-            :src="url"
-            :preview-src-list="parseReviewImages(orderReview.images)"
-            :initial-index="index"
-            fit="cover"
-            preview-teleported
-            class="review-thumb"
-          />
-        </div>
-      </template>
-      <p v-else>当前订单暂无评价</p>
-    </div>
-
-    <div class="action-bar">
-      <button v-if="detail.status === 0" class="btn pay-btn" @click="goPay">
-        去支付
-      </button>
-
-      <button v-if="detail.status === 0" class="btn cancel-btn" @click="handleCancel">
-        取消订单
-      </button>
-
-      <button v-if="detail.status === 1" class="btn complete-btn" @click="handleComplete">
-        确认完成
-      </button>
-
-      <button v-if="canSubmitReview" class="btn review-btn" @click="handleSubmitReview">
-        去评价
-      </button>
+    <div class="page-actions">
+      <el-button type="primary" @click="router.push('/my-order')">返回订单中心</el-button>
     </div>
   </div>
 </template>
 
 <style scoped>
-.page {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 24px;
-  background: #f6f8fb;
-  min-height: 100vh;
+.detail-page {
+  display: grid;
+  gap: 16px;
 }
 
-.header {
+.page-head {
+  padding: 18px 20px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 18px;
-}
-
-.header h2 {
-  margin: 0;
-  font-size: 30px;
-}
-
-.back-btn {
-  height: 38px;
-  padding: 0 16px;
-  border: none;
-  border-radius: 10px;
-  background: #f2f3f5;
-  cursor: pointer;
-}
-
-.card {
-  background: #fff;
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
-}
-
-.card h3 {
-  margin-top: 0;
-}
-
-.goods-section {
-  display: flex;
-  gap: 18px;
-}
-
-.cover {
-  width: 140px;
-  height: 140px;
-  object-fit: cover;
-  border-radius: 12px;
-}
-
-.goods-info {
-  flex: 1;
-}
-
-.goods-info h3 {
-  margin: 0 0 10px;
-}
-
-.goods-info p,
-.card p {
-  margin: 8px 0;
-  color: #555;
-}
-
-.status {
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-}
-
-.pending {
-  background: #fff7e6;
-  color: #d48806;
-}
-
-.paid {
-  background: #e6f7ff;
-  color: #1677ff;
-}
-
-.done {
-  background: #f6ffed;
-  color: #389e0d;
-}
-
-.cancel {
-  background: #fff1f0;
-  color: #cf1322;
-}
-
-.timeout {
-  background: #f5f5f5;
-  color: #666;
-}
-
-.action-bar {
-  display: flex;
+  justify-content: space-between;
   gap: 12px;
-  margin-top: 20px;
 }
 
-.btn {
-  height: 40px;
-  padding: 0 18px;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-}
-
-.pay-btn {
-  background: #409eff;
-  color: #fff;
-}
-
-.cancel-btn {
-  background: #ff7875;
-  color: #fff;
-}
-
-.complete-btn {
-  background: #67c23a;
-  color: #fff;
-}
-
-.review-btn {
-  background: #9b6bff;
-  color: #fff;
-}
-
-.review-images {
-  margin-top: 10px;
-  display: flex;
-  flex-wrap: wrap;
+.head-copy {
+  display: grid;
   gap: 8px;
 }
 
-.review-thumb {
-  width: 88px;
-  height: 88px;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  overflow: hidden;
+.head-copy p {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--zz-text-light);
 }
 
-.review-thumb :deep(.el-image__inner) {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  cursor: zoom-in;
+.head-copy h1 {
+  font-size: clamp(28px, 3vw, 38px);
+  line-height: 1.1;
+  color: var(--zz-black);
+}
+
+.head-copy span {
+  color: var(--zz-text-secondary);
+  line-height: 1.65;
+}
+
+.detail-layout {
+  align-items: start;
+}
+
+.detail-card,
+.panel-card {
+  border-radius: 24px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-head h2,
+.panel-head h3 {
+  font-size: 18px;
+  color: var(--zz-black);
+}
+
+.panel-head p {
+  margin-top: 6px;
+  color: var(--zz-text-secondary);
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.step-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.step-list li {
+  display: grid;
+  gap: 4px;
+}
+
+.step-list strong {
+  font-size: 14px;
+  color: var(--zz-black);
+}
+
+.step-list span {
+  color: var(--zz-text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.detail-side {
+  display: grid;
+  gap: 16px;
+}
+
+.page-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1080px) {
+  .detail-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .page-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .page-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
 }
 </style>

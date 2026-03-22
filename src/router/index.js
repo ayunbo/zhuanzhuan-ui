@@ -1,147 +1,124 @@
-﻿import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 import { getStoredToken } from '@/utils/auth'
+
+const routes = [
+  {
+    path: '/',
+    name: 'home',
+    component: () => import('@/views/HomeView.vue'),
+    meta: { title: '首页' },
+  },
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/LoginView.vue'),
+    meta: { title: '登录', guestOnly: true },
+  },
+  {
+    path: '/register',
+    name: 'register',
+    component: () => import('@/views/RegisterView.vue'),
+    meta: { title: '注册', guestOnly: true },
+  },
+  {
+    path: '/profile',
+    name: 'profile',
+    component: () => import('@/views/ProfileView.vue'),
+    meta: { title: '个人中心', requiresAuth: true },
+  },
+  {
+    path: '/seller-auth',
+    name: 'sellerAuth',
+    component: () => import('@/views/SellerAuthView.vue'),
+    meta: { title: '卖家认证', requiresAuth: true },
+  },
+  {
+    path: '/seller/goods',
+    name: 'seller-goods',
+    component: () => import('@/views/SellerGoodsManageView.vue'),
+    meta: { title: '我的闲置', requiresAuth: true },
+  },
+  {
+    path: '/goods',
+    name: 'goods-list',
+    component: () => import('@/views/GoodsListView.vue'),
+    meta: { title: '商品广场' },
+  },
+  {
+    path: '/goods/:id',
+    name: 'goods-detail',
+    component: () => import('@/views/GoodsDetailView.vue'),
+    meta: { title: '商品详情' },
+  },
+  {
+    path: '/order/create',
+    name: 'order-create',
+    component: () => import('@/views/OrderCreateView.vue'),
+    meta: { title: '创建订单', requiresAuth: true },
+  },
+  {
+    path: '/order-test',
+    name: 'order-test',
+    component: () => import('@/views/OrderTestView.vue'),
+    meta: { title: '订单测试', requiresAuth: true },
+  },
+  {
+    path: '/pay',
+    name: 'pay',
+    component: () => import('@/views/PayView.vue'),
+    meta: { title: '支付中心', requiresAuth: true },
+  },
+  {
+    path: '/my-order',
+    name: 'my-order',
+    component: () => import('@/views/MyOrderView.vue'),
+    meta: { title: '我的订单', requiresAuth: true },
+  },
+  {
+    path: '/order/detail/:id',
+    name: 'order-detail',
+    component: () => import('@/views/OrderDetailView.vue'),
+    meta: { title: '订单详情', requiresAuth: true },
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'notFound',
+    component: () => import('@/views/NotFoundView.vue'),
+    meta: { title: '页面不存在' },
+  },
+]
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [
-    {
-      path: '/',
-      name: 'home',
-      component: () => import('@/views/HomeView.vue'),
-      meta: {
-        title: '首页',
-      },
-    },
-    {
-      path: '/login',
-      name: 'login',
-      component: () => import('@/views/LoginView.vue'),
-      meta: {
-        title: '用户登录',
-        guestOnly: true,
-      },
-    },
-    {
-      path: '/register',
-      name: 'register',
-      component: () => import('@/views/RegisterView.vue'),
-      meta: {
-        title: '用户注册',
-        guestOnly: true,
-      },
-    },
-    {
-      path: '/profile',
-      name: 'profile',
-      component: () => import('@/views/ProfileView.vue'),
-      meta: {
-        title: '个人中心',
-        requiresAuth: true,
-      },
-    },
-    {
-      path: '/wallet',
-      name: 'wallet',
-      component: () => import('@/views/VirtualWalletView.vue'),
-      meta: {
-        title: '虚拟钱包',
-        requiresAuth: true,
-      },
-    },
-    {
-      path: '/seller-auth',
-      name: 'sellerAuth',
-      component: () => import('@/views/SellerAuthView.vue'),
-      meta: {
-        title: '卖家认证',
-        requiresAuth: true,
-      },
-    },
-    {
-      path: '/order/create',
-      name: 'order-create',
-      component: () => import('@/views/OrderCreateView.vue'),
-      meta: {
-        title: '创建订单',
-        requiresAuth: true,
-      },
-    },
-    {
-      path: '/order-test',
-      name: 'order-test',
-      component: () => import('@/views/OrderTestView.vue'),
-      meta: {
-        title: '订单测试',
-      },
-    },
-    {
-      path: '/goods',
-      name: 'goods-list',
-      component: () => import('@/views/GoodsListView.vue'),
-      meta: {
-        title: '商品列表',
-      },
-    },
-    {
-      path: '/goods/:id',
-      name: 'goods-detail',
-      component: () => import('@/views/GoodsDetailView.vue'),
-      meta: {
-        title: '商品详情',
-      },
-    },
-    {
-      path: '/pay',
-      name: 'pay',
-      component: () => import('@/views/PayView.vue'),
-      meta: {
-        title: '订单支付',
-        requiresAuth: true,
-      },
-    },
-    {
-      path: '/my-order',
-      name: 'my-order',
-      component: () => import('@/views/MyOrderView.vue'),
-      meta: {
-        title: '我的订单',
-        requiresAuth: true,
-      },
-    },
-    {
-      path: '/order/detail/:id',
-      name: 'order-detail',
-      component: () => import('@/views/OrderDetailView.vue'),
-      meta: {
-        title: '订单详情',
-        requiresAuth: true,
-      },
-    },
-    {
-      path: '/:pathMatch(.*)*',
-      name: 'notFound',
-      component: () => import('@/views/NotFoundView.vue'),
-      meta: {
-        title: '页面不存在',
-      },
-    },
-  ],
+  routes,
 })
 
 router.beforeEach((to) => {
   const token = getStoredToken()
 
+  if (to.name === 'login' || to.name === 'register') {
+    const redirectPath = typeof to.query.redirect === 'string' ? to.query.redirect : ''
+    return {
+      name: 'home',
+      query: {
+        auth: to.name === 'register' ? 'register' : 'login',
+        ...(redirectPath ? { redirect: redirectPath } : {}),
+      },
+    }
+  }
+
   if (to.meta.requiresAuth && !token) {
     return {
-      name: 'login',
+      name: 'home',
       query: {
+        auth: 'login',
         redirect: to.fullPath,
       },
     }
   }
 
   if (to.meta.guestOnly && token) {
-    return { name: 'profile' }
+    return { name: 'home' }
   }
 
   return true
@@ -149,7 +126,7 @@ router.beforeEach((to) => {
 
 router.afterEach((to) => {
   const pageTitle = to.meta.title || '用户端'
-  document.title = `${pageTitle} - 赚赚`
+  document.title = `${pageTitle} - 转转校园`
 })
 
 export default router

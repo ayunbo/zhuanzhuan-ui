@@ -102,22 +102,10 @@ const router = createRouter({
 router.beforeEach((to) => {
   const token = getStoredToken()
 
-  if (to.name === 'login' || to.name === 'register') {
-    const redirectPath = typeof to.query.redirect === 'string' ? to.query.redirect : ''
-    return {
-      name: 'home',
-      query: {
-        auth: to.name === 'register' ? 'register' : 'login',
-        ...(redirectPath ? { redirect: redirectPath } : {}),
-      },
-    }
-  }
-
   if (to.meta.requiresAuth && !token) {
     return {
-      name: 'home',
+      name: 'login',
       query: {
-        auth: 'login',
         redirect: to.fullPath,
       },
     }

@@ -1,280 +1,365 @@
-﻿<script setup>
-import { onMounted, ref } from 'vue'
+<script setup>
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { cancelOrder, completeOrder, getOrderDetail } from '@/api/order'
+import { formatCurrency, formatDateTime } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
 
-const defaultCover = 'https://via.placeholder.com/140x140?text=Goods'
-const detail = ref(null)
+const loading = ref(false)
+const orderDetail = ref(null)
 
-function formatOrderStatus(status) {
-  const map = {
-    0: '待支付',
-    1: '已支付',
-    2: '已完成',
-    3: '已取消',
-    4: '超时关闭',
-  }
-  return map[status] || '未知状态'
+const orderId = computed(() => {
+  const raw = Array.isArray(route.params.id) ? route.params.id[0] : route.params.id
+  const id = Number(raw)
+  return Number.isFinite(id) && id > 0 ? id : null
+})
+
+const statusTextMap = {
+  0: '待支付',
+  1: '已支付',
+  2: '已完成',
+  3: '已取消',
+  4: '超时关闭',
 }
 
-function statusClass(status) {
-  const map = {
-    0: 'pending',
-    1: 'paid',
-    2: 'done',
-    3: 'cancel',
-    4: 'timeout',
-  }
-  return map[status] || ''
+const statusText = computed(() => statusTextMap[orderDetail.value?.status] || '未知状态')
+
+function getTagType(status) {
+  if (status === 0) return 'warning'
+  if (status === 1) return 'success'
+  if (status === 2) return ''
+  if (status === 3 || status === 4) return 'info'
+  return 'info'
 }
 
-async function loadDetail() {
+async function loadOrderDetail() {
+  if (!orderId.value) {
+    ElMessage.warning('缺少订单编号')
+    router.replace('/my-order')
+    return
+  }
+
+  loading.value = true
   try {
-    const data = await getOrderDetail(Number(route.params.id))
-    detail.value = data
+    orderDetail.value = await getOrderDetail(orderId.value)
   } catch (error) {
-    ElMessage.error(error.message || '获取订单详情失败')
+    ElMessage.error(error.message || '订单详情加载失败')
+  } finally {
+    loading.value = false
   }
-}
-
-function goBack() {
-  router.push('/my-order')
 }
 
 function goPay() {
-  if (!detail.value?.id) return
-
+  if (!orderDetail.value) return
   router.push({
     path: '/pay',
     query: {
-      orderId: String(detail.value.id),
-      goodsTitle: detail.value.goodsTitle || '',
-      amount: detail.value.amount || detail.value.goodsPrice || '',
+      orderId: String(orderDetail.value.id),
+      goodsTitle: orderDetail.value.goodsTitle || '',
+      amount: String(orderDetail.value.amount || ''),
     },
   })
 }
 
 async function handleCancel() {
-  const ok = window.confirm('确定要取消该订单吗？')
-  if (!ok) return
-
+  if (!orderDetail.value) return
   try {
-    await cancelOrder(detail.value.id)
+    await ElMessageBox.confirm('确认取消当前订单吗？', '取消订单', {
+      confirmButtonText: '确认取消',
+      cancelButtonText: '再想想',
+      type: 'warning',
+    })
+    await cancelOrder(orderDetail.value.id)
     ElMessage.success('订单已取消')
-    loadDetail()
-  } catch (error) {
-    ElMessage.error(error.message || '取消订单失败')
+    loadOrderDetail()
+  } catch {
+    // ignore
   }
 }
 
 async function handleComplete() {
-  const ok = window.confirm('确认已收货并完成订单吗？')
-  if (!ok) return
-
+  if (!orderDetail.value) return
   try {
-    await completeOrder(detail.value.id)
+    await ElMessageBox.confirm('确认交易已经完成吗？', '确认完成', {
+      confirmButtonText: '确认完成',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    await completeOrder(orderDetail.value.id)
     ElMessage.success('订单已完成')
-    loadDetail()
-  } catch (error) {
-    ElMessage.error(error.message || '确认完成失败')
+    loadOrderDetail()
+  } catch {
+    // ignore
   }
 }
 
-onMounted(() => {
-  loadDetail()
-})
+onMounted(loadOrderDetail)
 </script>
 
 <template>
-  <div v-if="detail" class="page">
-    <div class="header">
-      <h2>订单详情</h2>
-      <button class="back-btn" @click="goBack">返回订单列表</button>
-    </div>
-
-    <div class="card">
-      <div class="goods-section">
-        <img :src="detail.goodsCover || defaultCover" class="cover" />
-        <div class="goods-info">
-          <h3>{{ detail.goodsTitle }}</h3>
-          <p>订单号：{{ detail.orderNo }}</p>
-          <p>商品价格：￥{{ detail.goodsPrice }}</p>
-          <p>
-            订单状态：
-            <span class="status" :class="statusClass(detail.status)">
-              {{ formatOrderStatus(detail.status) }}
-            </span>
-          </p>
-        </div>
+  <div class="detail-page zz-page">
+    <section class="page-head zz-card">
+      <div class="head-copy">
+        <p>ORDER DETAIL</p>
+        <h1>订单详情</h1>
+        <span>这里展示订单的真实详情信息，包括金额、见面时间、联系人和当前订单状态。</span>
       </div>
-    </div>
+      <el-tag round type="success">已接入</el-tag>
+    </section>
 
-    <div class="card">
-      <h3>交易信息</h3>
-      <p>交易地点：{{ detail.meetLocation || '未填写' }}</p>
-      <p>交易时间：{{ detail.meetTime || '未填写' }}</p>
-      <p>备注：{{ detail.remark || '无' }}</p>
-    </div>
+    <div class="detail-layout zz-two-column">
+      <main class="detail-main">
+        <el-card v-loading="loading" class="detail-card" shadow="never">
+          <template #header>
+            <div class="panel-head">
+              <div>
+                <h2>基础信息</h2>
+                <p>以下内容全部来自订单详情接口。</p>
+              </div>
+            </div>
+          </template>
 
-    <div class="card">
-      <h3>买卖双方信息</h3>
-      <p>买家：{{ detail.buyerName || '未记录' }} / {{ detail.buyerPhone || '未记录' }}</p>
-      <p>卖家：{{ detail.sellerName || '未记录' }} / {{ detail.sellerPhone || '未记录' }}</p>
-    </div>
+          <template v-if="orderDetail">
+            <div class="hero-row">
+              <div class="goods-block">
+                <img v-if="orderDetail.goodsCover" :src="orderDetail.goodsCover" :alt="orderDetail.goodsTitle" />
+                <div v-else class="cover-empty">暂无封面</div>
+                <div>
+                  <h3>{{ orderDetail.goodsTitle || '当前商品' }}</h3>
+                  <p>订单号：{{ orderDetail.orderNo }}</p>
+                </div>
+              </div>
+              <el-tag round :type="getTagType(orderDetail.status)">{{ statusText }}</el-tag>
+            </div>
 
-    <div class="card">
-      <h3>时间信息</h3>
-      <p>创建时间：{{ detail.createTime || '未记录' }}</p>
-      <p>支付时间：{{ detail.payTime || '未支付' }}</p>
-      <p>完成时间：{{ detail.completeTime || '未完成' }}</p>
-      <p>关闭时间：{{ detail.closeTime || '未关闭' }}</p>
-    </div>
+            <el-descriptions :column="2" border>
+              <el-descriptions-item label="订单 ID">{{ orderDetail.id }}</el-descriptions-item>
+              <el-descriptions-item label="订单金额">{{ formatCurrency(orderDetail.amount) }}</el-descriptions-item>
+              <el-descriptions-item label="交易地点">{{ orderDetail.meetLocation || '未填写' }}</el-descriptions-item>
+              <el-descriptions-item label="交易时间">{{ formatDateTime(orderDetail.meetTime) }}</el-descriptions-item>
+              <el-descriptions-item label="买家">{{ orderDetail.buyerName || '未返回' }}</el-descriptions-item>
+              <el-descriptions-item label="买家电话">{{ orderDetail.buyerPhone || '未返回' }}</el-descriptions-item>
+              <el-descriptions-item label="卖家">{{ orderDetail.sellerName || '未返回' }}</el-descriptions-item>
+              <el-descriptions-item label="卖家电话">{{ orderDetail.sellerPhone || '未返回' }}</el-descriptions-item>
+              <el-descriptions-item label="创建时间">{{ formatDateTime(orderDetail.createTime) }}</el-descriptions-item>
+              <el-descriptions-item label="支付时间">{{ formatDateTime(orderDetail.payTime) }}</el-descriptions-item>
+              <el-descriptions-item label="关闭时间">{{ formatDateTime(orderDetail.closeTime) }}</el-descriptions-item>
+              <el-descriptions-item label="完成时间">{{ formatDateTime(orderDetail.completeTime) }}</el-descriptions-item>
+              <el-descriptions-item label="备注说明" :span="2">{{ orderDetail.remark || '无' }}</el-descriptions-item>
+            </el-descriptions>
 
-    <div class="action-bar">
-      <button v-if="detail.status === 0" class="btn pay-btn" @click="goPay">
-        去支付
-      </button>
+            <div class="action-row">
+              <el-button @click="router.push('/my-order')">返回订单中心</el-button>
+              <el-button v-if="orderDetail.status === 0" type="primary" @click="goPay">去支付</el-button>
+              <el-button v-if="orderDetail.status === 0" danger plain @click="handleCancel">取消订单</el-button>
+              <el-button v-if="orderDetail.status === 1" type="success" @click="handleComplete">确认完成</el-button>
+            </div>
+          </template>
+        </el-card>
+      </main>
 
-      <button v-if="detail.status === 0" class="btn cancel-btn" @click="handleCancel">
-        取消订单
-      </button>
+      <aside class="detail-side">
+        <el-card class="panel-card" shadow="never">
+          <template #header>
+            <div class="panel-head">
+              <h3>接入说明</h3>
+              <el-tag round>只读</el-tag>
+            </div>
+          </template>
 
-      <button v-if="detail.status === 1" class="btn complete-btn" @click="handleComplete">
-        确认完成
-      </button>
+          <ol class="step-list">
+            <li>
+              <strong>详情已接入</strong>
+              <span>订单主信息、快照信息和买卖双方联系方式都来自后端接口。</span>
+            </li>
+            <li>
+              <strong>状态操作已接入</strong>
+              <span>待支付订单可以继续支付或取消，已支付订单可以确认完成。</span>
+            </li>
+            <li>
+              <strong>保持真实链路</strong>
+              <span>这里不会展示假数据，页面行为完全跟随后端订单状态变化。</span>
+            </li>
+          </ol>
+        </el-card>
+
+        <el-alert
+          title="提示"
+          type="info"
+          :closable="false"
+          show-icon
+          description="如果管理员在后台修改了当前订单状态，刷新本页后也会同步看到最新结果。"
+        />
+      </aside>
     </div>
   </div>
 </template>
 
 <style scoped>
-.page {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 24px;
-  background: #f6f8fb;
-  min-height: 100vh;
+.detail-page {
+  display: grid;
+  gap: 16px;
 }
 
-.header {
+.page-head {
+  padding: 18px 20px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.head-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.head-copy p {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--zz-text-light);
+}
+
+.head-copy h1 {
+  font-size: clamp(28px, 3vw, 38px);
+  line-height: 1.1;
+  color: var(--zz-black);
+}
+
+.head-copy span {
+  color: var(--zz-text-secondary);
+  line-height: 1.65;
+}
+
+.detail-layout {
+  align-items: start;
+}
+
+.detail-card,
+.panel-card {
+  border-radius: 24px;
+}
+
+.hero-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 18px;
 }
 
-.header h2 {
-  margin: 0;
-  font-size: 30px;
-}
-
-.back-btn {
-  height: 38px;
-  padding: 0 16px;
-  border: none;
-  border-radius: 10px;
-  background: #f2f3f5;
-  cursor: pointer;
-}
-
-.card {
-  background: #fff;
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
-}
-
-.card h3 {
-  margin-top: 0;
-}
-
-.goods-section {
+.goods-block {
   display: flex;
-  gap: 18px;
+  gap: 14px;
 }
 
-.cover {
-  width: 140px;
-  height: 140px;
+.goods-block img,
+.cover-empty {
+  width: 108px;
+  height: 108px;
+  border-radius: 18px;
+  background: #f2f2f2;
   object-fit: cover;
-  border-radius: 12px;
 }
 
-.goods-info {
-  flex: 1;
+.cover-empty {
+  display: grid;
+  place-items: center;
+  color: var(--zz-text-light);
+  font-size: 13px;
 }
 
-.goods-info h3 {
-  margin: 0 0 10px;
+.goods-block h3 {
+  font-size: 22px;
+  color: var(--zz-black);
 }
 
-.goods-info p,
-.card p {
-  margin: 8px 0;
-  color: #555;
+.goods-block p {
+  margin-top: 8px;
+  color: var(--zz-text-secondary);
 }
 
-.status {
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-}
-
-.pending {
-  background: #fff7e6;
-  color: #d48806;
-}
-
-.paid {
-  background: #e6f7ff;
-  color: #1677ff;
-}
-
-.done {
-  background: #f6ffed;
-  color: #389e0d;
-}
-
-.cancel {
-  background: #fff1f0;
-  color: #cf1322;
-}
-
-.timeout {
-  background: #f5f5f5;
-  color: #666;
-}
-
-.action-bar {
+.panel-head {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
-  margin-top: 20px;
 }
 
-.btn {
-  height: 40px;
-  padding: 0 18px;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
+.panel-head h2,
+.panel-head h3 {
+  font-size: 18px;
+  color: var(--zz-black);
 }
 
-.pay-btn {
-  background: #409eff;
-  color: #fff;
+.panel-head p {
+  margin-top: 6px;
+  color: var(--zz-text-secondary);
+  line-height: 1.6;
+  font-size: 13px;
 }
 
-.cancel-btn {
-  background: #ff7875;
-  color: #fff;
+.step-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 12px;
 }
 
-.complete-btn {
-  background: #67c23a;
-  color: #fff;
+.step-list li {
+  display: grid;
+  gap: 4px;
+}
+
+.step-list strong {
+  font-size: 14px;
+  color: var(--zz-black);
+}
+
+.step-list span {
+  color: var(--zz-text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.detail-side {
+  display: grid;
+  gap: 16px;
+}
+
+.action-row {
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1080px) {
+  .detail-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .page-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .hero-row,
+  .goods-block,
+  .action-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .action-row {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
 }
 </style>

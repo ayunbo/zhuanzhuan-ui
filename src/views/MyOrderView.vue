@@ -1,412 +1,505 @@
-﻿<script setup>
-import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+<script setup>
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import MarketplaceUserSidebar from '@/components/MarketplaceUserSidebar.vue'
 import { cancelOrder, completeOrder, getOrderPage } from '@/api/order'
+import { formatCurrency, formatDateTime } from '@/utils/format'
 
+const route = useRoute()
 const router = useRouter()
 
-const defaultCover = 'https://via.placeholder.com/120x120?text=Goods'
 const loading = ref(false)
-const orderList = ref([])
+const orders = ref([])
 const total = ref(0)
+const page = ref(1)
+const pageSize = ref(10)
 
-// 中文注释：type 为 1 表示买到的订单，2 表示卖出的订单。
-const query = ref({
-  page: 1,
-  pageSize: 10,
-  type: 1,
-  status: '',
+const typeValue = computed(() => {
+  const raw = Array.isArray(route.query.type) ? route.query.type[0] : route.query.type
+  return raw === 'sell' ? 'sell' : 'buy'
 })
 
-function formatOrderStatus(status) {
-  const map = {
-    0: '待支付',
-    1: '已支付',
-    2: '已完成',
-    3: '已取消',
-    4: '超时关闭',
-  }
-  return map[status] || '未知状态'
+const menuKey = computed(() => (typeValue.value === 'sell' ? 'sold' : 'bought'))
+const activeTab = ref('all')
+
+const statusMap = {
+  all: null,
+  pendingPay: 0,
+  paid: 1,
+  finished: 2,
+  canceled: 3,
+  timeoutClosed: 4,
 }
 
-function statusClass(status) {
-  const map = {
-    0: 'pending',
-    1: 'paid',
-    2: 'done',
-    3: 'cancel',
-    4: 'timeout',
-  }
-  return map[status] || ''
+const statusTextMap = {
+  0: '待支付',
+  1: '已支付',
+  2: '已完成',
+  3: '已取消',
+  4: '超时关闭',
 }
 
-async function loadOrderList() {
+const routeSummary = computed(() => [
+  {
+    label: '视图',
+    value: typeValue.value === 'sell' ? '我卖出的订单' : '我买到的订单',
+  },
+  {
+    label: '筛选',
+    value: activeTab.value === 'all' ? '全部订单' : tabs.find((item) => item.name === activeTab.value)?.label || '全部订单',
+  },
+  {
+    label: '总数',
+    value: `${total.value} 条`,
+  },
+])
+
+const tabs = [
+  { name: 'all', label: '全部订单' },
+  { name: 'pendingPay', label: '待付款' },
+  { name: 'paid', label: '已支付' },
+  { name: 'finished', label: '已完成' },
+  { name: 'canceled', label: '已取消' },
+]
+
+function getStatusText(status) {
+  return statusTextMap[status] || '未知状态'
+}
+
+function getTagType(status) {
+  if (status === 0) return 'warning'
+  if (status === 1) return 'success'
+  if (status === 2) return ''
+  if (status === 3 || status === 4) return 'info'
+  return 'info'
+}
+
+async function loadOrders() {
   loading.value = true
   try {
-    const params = {
-      page: query.value.page,
-      pageSize: query.value.pageSize,
-      type: query.value.type,
-    }
-
-    if (query.value.status !== '' && query.value.status !== null) {
-      params.status = query.value.status
-    }
-
-    const data = await getOrderPage(params)
-    orderList.value = data?.records || data?.result || data?.list || []
-    total.value = data?.total || 0
+    const data = await getOrderPage({
+      page: page.value,
+      pageSize: pageSize.value,
+      type: typeValue.value === 'sell' ? 2 : 1,
+      ...(statusMap[activeTab.value] !== null ? { status: statusMap[activeTab.value] } : {}),
+    })
+    orders.value = data?.records || []
+    total.value = Number(data?.total || 0)
   } catch (error) {
-    ElMessage.error(error.message || '获取订单列表失败')
+    orders.value = []
+    total.value = 0
+    ElMessage.error(error.message || '订单列表加载失败')
   } finally {
     loading.value = false
   }
 }
 
-function switchType(type) {
-  query.value.type = type
-  query.value.page = 1
-  loadOrderList()
+function goDetail(order) {
+  router.push(`/order/detail/${order.id}`)
 }
 
-function prevPage() {
-  if (query.value.page <= 1) return
-  query.value.page--
-  loadOrderList()
-}
-
-function nextPage() {
-  if (query.value.page * query.value.pageSize >= total.value) return
-  query.value.page++
-  loadOrderList()
-}
-
-function goDetail(id) {
-  router.push(`/order/detail/${id}`)
-}
-
-function goPay(item) {
+function goPay(order) {
   router.push({
     path: '/pay',
     query: {
-      orderId: String(item.id),
-      goodsTitle: item.goodsTitle || '',
-      amount: item.amount || '',
+      orderId: String(order.id),
+      goodsTitle: order.goodsTitle || '',
+      amount: String(order.amount || ''),
     },
   })
 }
 
-async function handleCancel(id) {
-  const ok = window.confirm('确定要取消该订单吗？')
-  if (!ok) return
-
+async function handleCancel(order) {
   try {
-    await cancelOrder(id)
+    await ElMessageBox.confirm('确认取消当前订单吗？', '取消订单', {
+      confirmButtonText: '确认取消',
+      cancelButtonText: '再想想',
+      type: 'warning',
+    })
+    await cancelOrder(order.id)
     ElMessage.success('订单已取消')
-    loadOrderList()
-  } catch (error) {
-    ElMessage.error(error.message || '取消订单失败')
+    loadOrders()
+  } catch {
+    // 用户取消或请求失败已提示
   }
 }
 
-async function handleComplete(id) {
-  const ok = window.confirm('确认已收货并完成订单吗？')
-  if (!ok) return
-
+async function handleComplete(order) {
   try {
-    await completeOrder(id)
+    await ElMessageBox.confirm('确认本次交易已经完成吗？', '确认完成', {
+      confirmButtonText: '确认完成',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    await completeOrder(order.id)
     ElMessage.success('订单已完成')
-    loadOrderList()
-  } catch (error) {
-    ElMessage.error(error.message || '确认完成失败')
+    loadOrders()
+  } catch {
+    // 用户取消或请求失败已提示
   }
 }
 
-onMounted(() => {
-  loadOrderList()
+watch([typeValue, activeTab, page], () => {
+  loadOrders()
 })
+
+onMounted(loadOrders)
 </script>
 
 <template>
-  <div class="page">
-    <div class="page-header">
-      <h2>我的订单</h2>
-
-      <div class="tabs">
-        <button class="tab-btn" :class="{ active: query.type === 1 }" @click="switchType(1)">
-          我买到的
-        </button>
-        <button class="tab-btn" :class="{ active: query.type === 2 }" @click="switchType(2)">
-          我卖出的
-        </button>
+  <div class="order-page zz-page">
+    <section class="order-banner zz-card">
+      <div class="banner-copy">
+        <p>ORDER CENTER</p>
+        <h1>订单中心</h1>
+        <span>当前页面只保留状态筛选、路由摘要和空态，占位等待订单列表接口接入。</span>
       </div>
 
-      <div class="status-filter">
-        <select v-model="query.status" @change="loadOrderList">
-          <option value="">全部状态</option>
-          <option :value="0">待支付</option>
-          <option :value="1">已支付</option>
-          <option :value="2">已完成</option>
-          <option :value="3">已取消</option>
-          <option :value="4">超时关闭</option>
-        </select>
+      <div class="banner-meta">
+        <article v-for="item in routeSummary" :key="item.label" class="banner-stat">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+        </article>
       </div>
-    </div>
+    </section>
 
-    <div v-if="loading" class="loading">订单加载中...</div>
-    <div v-else-if="orderList.length === 0" class="empty">暂无订单数据</div>
+    <div class="order-layout zz-two-column">
+      <aside class="order-side">
+        <MarketplaceUserSidebar :activeKey="menuKey" />
+      </aside>
 
-    <div v-else class="order-list">
-      <div v-for="item in orderList" :key="item.id" class="order-card">
-        <div class="left">
-          <img :src="item.goodsCover || defaultCover" class="cover" />
-        </div>
-
-        <div class="center">
-          <div class="title-row">
-            <h3>{{ item.goodsTitle }}</h3>
-            <span class="status-tag" :class="statusClass(item.status)">
-              {{ formatOrderStatus(item.status) }}
-            </span>
+      <main class="order-main">
+        <el-card class="order-center-card" shadow="never">
+          <div class="panel-head">
+            <div>
+              <h2>订单列表</h2>
+              <p>这里展示当前账号的真实订单数据，并根据订单状态给出可执行操作。</p>
+            </div>
+            <el-tag round type="success">已接入</el-tag>
           </div>
 
-          <p>订单号：{{ item.orderNo }}</p>
-          <p>订单金额：￥{{ item.amount }}</p>
-          <p>交易地点：{{ item.meetLocation || '未填写' }}</p>
-          <p>交易时间：{{ item.meetTime || '未填写' }}</p>
-          <p>创建时间：{{ item.createTime || '未记录' }}</p>
-        </div>
+          <el-tabs v-model="activeTab" class="order-tabs">
+            <el-tab-pane v-for="tab in tabs" :key="tab.name" :label="tab.label" :name="tab.name" />
+          </el-tabs>
 
-        <div class="right">
-          <button class="btn detail-btn" @click="goDetail(item.id)">查看详情</button>
+          <div v-loading="loading" class="list-wrap">
+            <div v-if="orders.length" class="order-list">
+              <article v-for="item in orders" :key="item.id" class="order-item">
+                <div class="order-cover">
+                  <img v-if="item.goodsCover" :src="item.goodsCover" :alt="item.goodsTitle" />
+                  <div v-else class="cover-empty">暂无封面</div>
+                </div>
 
-          <button
-            v-if="query.type === 1 && item.status === 0"
-            class="btn pay-btn"
-            @click="goPay(item)"
-          >
-            去支付
-          </button>
+                <div class="order-copy">
+                  <div class="order-top">
+                    <div>
+                      <h3>{{ item.goodsTitle || '未命名商品' }}</h3>
+                      <p>订单号：{{ item.orderNo }}</p>
+                    </div>
+                    <el-tag round :type="getTagType(item.status)">{{ getStatusText(item.status) }}</el-tag>
+                  </div>
 
-          <button
-            v-if="query.type === 1 && item.status === 0"
-            class="btn cancel-btn"
-            @click="handleCancel(item.id)"
-          >
-            取消订单
-          </button>
+                  <div class="order-meta">
+                    <span>金额：{{ formatCurrency(item.amount) }}</span>
+                    <span>交易地点：{{ item.meetLocation || '未填写' }}</span>
+                    <span>交易时间：{{ formatDateTime(item.meetTime) }}</span>
+                    <span>创建时间：{{ formatDateTime(item.createTime) }}</span>
+                  </div>
 
-          <button
-            v-if="query.type === 1 && item.status === 1"
-            class="btn complete-btn"
-            @click="handleComplete(item.id)"
-          >
-            确认完成
-          </button>
-        </div>
-      </div>
-    </div>
+                  <div class="order-actions">
+                    <el-button @click="goDetail(item)">查看详情</el-button>
+                    <el-button v-if="item.status === 0 && typeValue !== 'sell'" type="primary" @click="goPay(item)">
+                      去支付
+                    </el-button>
+                    <el-button v-if="item.status === 0 && typeValue !== 'sell'" danger plain @click="handleCancel(item)">
+                      取消订单
+                    </el-button>
+                    <el-button v-if="item.status === 1 && typeValue !== 'sell'" type="success" @click="handleComplete(item)">
+                      确认完成
+                    </el-button>
+                  </div>
+                </div>
+              </article>
+            </div>
 
-    <div v-if="total > 0" class="pager">
-      <button class="page-btn" :disabled="query.page <= 1" @click="prevPage">上一页</button>
-      <span>第 {{ query.page }} 页</span>
-      <button class="page-btn" :disabled="query.page * query.pageSize >= total" @click="nextPage">
-        下一页
-      </button>
+            <div v-else class="empty-wrap">
+              <el-empty description="当前没有符合条件的订单" />
+            </div>
+          </div>
+
+          <div class="route-strip">
+            <article v-for="item in routeSummary" :key="`strip-${item.label}`" class="route-item">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </article>
+          </div>
+
+          <el-pagination
+            v-if="total > pageSize"
+            class="pager"
+            background
+            layout="prev, pager, next"
+            :current-page="page"
+            :page-size="pageSize"
+            :total="total"
+            @current-change="page = $event"
+          />
+        </el-card>
+      </main>
     </div>
   </div>
 </template>
 
 <style scoped>
-.page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 24px;
-  background: #f6f8fb;
-  min-height: 100vh;
-}
-
-.page-header {
-  display: flex;
-  align-items: center;
+.order-page {
+  display: grid;
   gap: 16px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
 }
 
-.page-header h2 {
-  margin: 0;
-  font-size: 30px;
+.order-banner {
+  padding: 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 16px;
+  align-items: end;
 }
 
-.tabs {
-  display: flex;
+.banner-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.banner-copy p {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--zz-text-light);
+}
+
+.banner-copy h1 {
+  font-size: clamp(28px, 3vw, 38px);
+  line-height: 1.1;
+  color: var(--zz-black);
+}
+
+.banner-copy span {
+  color: var(--zz-text-secondary);
+  line-height: 1.65;
+}
+
+.banner-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
-.tab-btn {
-  height: 38px;
-  padding: 0 18px;
-  border: none;
-  border-radius: 10px;
-  background: #eef2f7;
-  cursor: pointer;
+.banner-stat {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--zz-border);
+  background: #fafafa;
+  display: grid;
+  gap: 6px;
 }
 
-.tab-btn.active {
-  background: #409eff;
-  color: #fff;
+.banner-stat span {
+  font-size: 12px;
+  color: var(--zz-text-light);
 }
 
-.status-filter select {
-  height: 38px;
-  border: 1px solid #dcdfe6;
-  border-radius: 10px;
-  padding: 0 12px;
+.banner-stat strong {
+  font-size: 16px;
+  color: var(--zz-black);
 }
 
-.loading,
-.empty {
-  text-align: center;
-  color: #888;
-  padding: 40px 0;
+.order-layout {
+  align-items: start;
 }
 
-.order-list {
+.order-side {
+  position: sticky;
+  top: 146px;
+}
+
+.order-main {
+  min-width: 0;
+}
+
+.order-center-card {
+  border-radius: 24px;
+}
+
+.panel-head {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.order-card {
-  display: flex;
-  gap: 18px;
-  background: #fff;
-  border-radius: 16px;
-  padding: 18px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
-}
-
-.left {
-  width: 120px;
-  flex-shrink: 0;
-}
-
-.cover {
-  width: 120px;
-  height: 120px;
-  object-fit: cover;
-  border-radius: 12px;
-}
-
-.center {
-  flex: 1;
-}
-
-.center p {
-  margin: 8px 0;
-  color: #555;
-}
-
-.title-row {
-  display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.title-row h3 {
-  margin: 0;
+.panel-head h2 {
   font-size: 20px;
+  color: var(--zz-black);
 }
 
-.status-tag {
-  padding: 6px 12px;
-  border-radius: 14px;
-  font-size: 12px;
-  white-space: nowrap;
+.panel-head p {
+  margin-top: 6px;
+  color: var(--zz-text-secondary);
+  line-height: 1.6;
+  font-size: 13px;
 }
 
-.pending {
-  background: #fff7e6;
-  color: #d48806;
+.order-tabs {
+  margin-top: 14px;
 }
 
-.paid {
-  background: #e6f7ff;
-  color: #1677ff;
+.list-wrap {
+  min-height: 240px;
 }
 
-.done {
-  background: #f6ffed;
-  color: #389e0d;
+.order-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
 }
 
-.cancel {
-  background: #fff1f0;
-  color: #cf1322;
+.order-item {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 16px;
+  padding: 14px;
+  border-radius: 20px;
+  border: 1px solid var(--zz-border);
+  background: #fafafa;
 }
 
-.timeout {
-  background: #f5f5f5;
-  color: #666;
+.order-cover {
+  border-radius: 16px;
+  overflow: hidden;
+  background: #f2f2f2;
+  aspect-ratio: 1 / 1;
 }
 
-.right {
-  width: 120px;
-  flex-shrink: 0;
+.order-cover img,
+.cover-empty {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-empty {
+  display: grid;
+  place-items: center;
+  color: var(--zz-text-light);
+  font-size: 13px;
+}
+
+.order-copy {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.order-top {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.order-top h3 {
+  font-size: 18px;
+  color: var(--zz-black);
+}
+
+.order-top p {
+  margin-top: 6px;
+  color: var(--zz-text-secondary);
+  font-size: 13px;
+}
+
+.order-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  color: var(--zz-text-secondary);
+  font-size: 13px;
+}
+
+.order-actions {
+  display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
-.btn {
-  height: 36px;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
+.empty-wrap {
+  padding: 14px 0 4px;
 }
 
-.detail-btn {
-  background: #f2f3f5;
+.empty-copy {
+  display: grid;
+  gap: 6px;
+  text-align: center;
 }
 
-.pay-btn {
-  background: #409eff;
-  color: #fff;
+.empty-copy strong {
+  font-size: 18px;
+  color: var(--zz-black);
 }
 
-.cancel-btn {
-  background: #ff7875;
-  color: #fff;
+.empty-copy span {
+  color: var(--zz-text-secondary);
+  line-height: 1.65;
 }
 
-.complete-btn {
-  background: #67c23a;
-  color: #fff;
+.route-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.route-item {
+  border: 1px solid var(--zz-border);
+  border-radius: 18px;
+  background: #fafafa;
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.route-item span {
+  font-size: 12px;
+  color: var(--zz-text-light);
+}
+
+.route-item strong {
+  font-size: 14px;
+  color: var(--zz-black);
 }
 
 .pager {
-  margin-top: 22px;
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  align-items: center;
+  margin-top: 18px;
+  justify-content: flex-end;
 }
 
-.page-btn {
-  height: 36px;
-  padding: 0 16px;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  background: #409eff;
-  color: #fff;
+@media (max-width: 1080px) {
+  .order-banner {
+    grid-template-columns: 1fr;
+  }
+
+  .order-side {
+    position: static;
+  }
 }
 
-.page-btn:disabled {
-  background: #c0c4cc;
-  cursor: not-allowed;
+@media (max-width: 760px) {
+  .order-item {
+    grid-template-columns: 1fr;
+  }
+
+  .banner-meta,
+  .route-strip {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

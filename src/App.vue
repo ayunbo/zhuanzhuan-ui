@@ -13,25 +13,30 @@ import { ElMessage } from 'element-plus'
 import FloatingMessageCapsule from '@/components/chat/FloatingMessageCapsule.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
+import { useNotifyStore } from '@/stores/notify'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const chatStore = useChatStore()
+const notifyStore = useNotifyStore()
 
 const isAuthPage = computed(() => ['login', 'register'].includes(route.name))
 const showMessageCapsule = computed(() => route.name === 'home' && !isAuthPage.value)
-const messageUnreadCount = computed(() => (authStore.isLoggedIn ? chatStore.unreadTotal : 0))
+const messageUnreadCount = computed(() =>
+  authStore.isLoggedIn ? chatStore.unreadTotal + notifyStore.unreadTotal : 0,
+)
 
 async function bootstrapChatState() {
   if (!authStore.isLoggedIn) {
     chatStore.reset()
+    notifyStore.reset()
     return
   }
 
   try {
     chatStore.connectSocket()
-    await chatStore.refreshUnreadTotal()
+    await Promise.allSettled([chatStore.refreshUnreadTotal(), notifyStore.refreshUnreadTotal()])
   } catch {
     // Ignore unread fetch errors in app shell.
   }
@@ -40,6 +45,7 @@ async function bootstrapChatState() {
 const handleLogout = () => {
   authStore.logout()
   chatStore.reset()
+  notifyStore.reset()
   ElMessage.success('已安全退出')
   router.push('/login')
 }

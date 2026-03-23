@@ -27,6 +27,12 @@ const routes = [
     meta: { title: '个人中心', requiresAuth: true },
   },
   {
+    path: '/favorites',
+    name: 'favorites',
+    component: () => import('@/views/FavoriteListView.vue'),
+    meta: { title: '我的收藏', requiresAuth: true },
+  },
+  {
     path: '/seller-auth',
     name: 'sellerAuth',
     component: () => import('@/views/SellerAuthView.vue'),

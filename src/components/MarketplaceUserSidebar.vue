@@ -35,7 +35,7 @@ const menuSections = computed(() => [
   {
     title: '账户设置',
     items: [
-      { key: 'favorites', label: '我的收藏', icon: Star, action: () => router.push('/profile?tab=favorites') },
+      { key: 'favorites', label: '我的收藏', icon: Star, action: () => router.push('/favorites') },
       { key: 'seller-auth', label: '卖家认证', icon: Postcard, action: () => router.push('/seller-auth') },
     ],
   },

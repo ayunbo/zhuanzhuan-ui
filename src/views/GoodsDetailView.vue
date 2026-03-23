@@ -4,18 +4,23 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import MarketplaceEmptyState from '@/components/MarketplaceEmptyState.vue'
 import MarketplaceProductCard from '@/components/MarketplaceProductCard.vue'
+import { cancelCollectGoods, collectGoods, fetchFavoriteStatus } from '@/api/favorite'
 import { fetchPublicGoodsById, fetchPublicGoodsPage } from '@/api/goods'
 import { getGoodsReviewPage } from '@/api/review'
 import { GOODS_STATUS, GOODS_STATUS_LABEL_MAP } from '@/constants/goods'
+import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 
 const loading = ref(false)
 const detail = ref(null)
 const recommendGoods = ref([])
 const activeImageIndex = ref(0)
+const favoriteLoading = ref(false)
+const favorited = ref(false)
 
 const reviewLoading = ref(false)
 const reviewRecords = ref([])
@@ -47,6 +52,12 @@ const statusText = computed(() => {
   return GOODS_STATUS_LABEL_MAP[detailStatus.value] || '未知状态'
 })
 const canOrder = computed(() => detailStatus.value === GOODS_STATUS.ON_SALE)
+const canFavorite = computed(() => {
+  if (favorited.value) {
+    return true
+  }
+  return detailStatus.value === GOODS_STATUS.ON_SALE || detailStatus.value === GOODS_STATUS.LOCKED
+})
 
 const sellingTags = computed(() => {
   const tags = []
@@ -78,6 +89,63 @@ function goOrderDraft() {
       location: detail.value.location || '',
     },
   })
+}
+
+function goToLogin() {
+  router.push({
+    name: 'login',
+    query: {
+      redirect: route.fullPath,
+    },
+  })
+}
+
+async function loadFavoriteStatus(goodsId) {
+  if (!goodsId || !authStore.isLoggedIn) {
+    favorited.value = false
+    return
+  }
+
+  try {
+    const data = await fetchFavoriteStatus(goodsId)
+    favorited.value = Boolean(data?.favorited)
+  } catch {
+    favorited.value = false
+  }
+}
+
+async function toggleFavorite() {
+  const goodsId = detail.value?.id
+  if (!goodsId || favoriteLoading.value) {
+    return
+  }
+
+  if (!authStore.isLoggedIn) {
+    goToLogin()
+    return
+  }
+
+  if (!canFavorite.value) {
+    ElMessage.warning('当前商品状态不支持收藏')
+    return
+  }
+
+  favoriteLoading.value = true
+  try {
+    const result = favorited.value ? await cancelCollectGoods(goodsId) : await collectGoods(goodsId)
+    favorited.value = Boolean(result?.favorited)
+
+    const backendCount = Number(result?.favoriteCount)
+    if (detail.value && Number.isFinite(backendCount)) {
+      detail.value.favoriteCount = backendCount
+    }
+
+    ElMessage.success(favorited.value ? '收藏成功' : '已取消收藏')
+  } catch (error) {
+    ElMessage.error(error.message || '收藏操作失败')
+  } finally {
+    favoriteLoading.value = false
+  }
 }
 
 function goDetail(item) {
@@ -188,12 +256,13 @@ async function loadDetail() {
     detail.value = await fetchPublicGoodsById(id)
     activeImageIndex.value = 0
     reviewPage.value = 1
-    await Promise.all([loadRecommend(detail.value?.categoryId, id), loadReviews(id)])
+    await Promise.all([loadRecommend(detail.value?.categoryId, id), loadReviews(id), loadFavoriteStatus(id)])
   } catch (error) {
     detail.value = null
     recommendGoods.value = []
     reviewRecords.value = []
     reviewTotal.value = 0
+    favorited.value = false
     ElMessage.error(error.message || '商品详情加载失败')
   } finally {
     loading.value = false
@@ -204,6 +273,13 @@ watch(
   () => route.params.id,
   () => {
     loadDetail()
+  },
+)
+
+watch(
+  () => authStore.isLoggedIn,
+  () => {
+    loadFavoriteStatus(detail.value?.id)
   },
 )
 
@@ -300,9 +376,21 @@ onMounted(loadDetail)
             <el-button type="primary" :disabled="!canOrder" @click="goOrderDraft">
               {{ canOrder ? '立即下单' : '当前不可下单' }}
             </el-button>
+            <el-button
+              plain
+              class="favorite-btn"
+              :class="{ active: favorited }"
+              :disabled="favoriteLoading || (authStore.isLoggedIn && !canFavorite)"
+              @click="toggleFavorite"
+            >
+              <span class="favorite-icon">{{ favorited ? '♥' : '♡' }}</span>
+              <span>{{ favorited ? '已收藏' : '收藏' }}</span>
+            </el-button>
+            <el-button plain @click="router.push('/favorites')">我的收藏</el-button>
             <el-button plain @click="router.push('/my-order')">查看订单中心</el-button>
           </div>
           <p v-if="!canOrder" class="order-tip">仅在售商品可下单，当前商品状态：{{ statusText }}</p>
+          <p v-if="!authStore.isLoggedIn" class="favorite-tip">登录后可实时收藏商品</p>
         </aside>
       </section>
 
@@ -597,9 +685,32 @@ onMounted(loadDetail)
   flex-wrap: wrap;
 }
 
+.favorite-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.favorite-btn.active {
+  color: #e25b73;
+  border-color: #f3a9b8;
+  background: #fff3f6;
+}
+
+.favorite-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
 .order-tip {
   margin: -4px 0 0;
   color: #d14444;
+  font-size: 13px;
+}
+
+.favorite-tip {
+  margin: -8px 0 0;
+  color: var(--zz-text-light);
   font-size: 13px;
 }
 

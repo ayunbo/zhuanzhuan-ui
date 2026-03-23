@@ -6,6 +6,7 @@ import MarketplaceEmptyState from '@/components/MarketplaceEmptyState.vue'
 import MarketplaceProductCard from '@/components/MarketplaceProductCard.vue'
 import { fetchPublicGoodsById, fetchPublicGoodsPage } from '@/api/goods'
 import { getGoodsReviewPage } from '@/api/review'
+import { GOODS_STATUS, GOODS_STATUS_LABEL_MAP } from '@/constants/goods'
 import { formatDateTime } from '@/utils/format'
 
 const route = useRoute()
@@ -40,7 +41,12 @@ const galleryImages = computed(() => {
 const currentImage = computed(() => galleryImages.value[activeImageIndex.value] || '')
 const priceText = computed(() => `楼${Number(detail.value?.price || 0).toFixed(2)}`)
 const sellerName = computed(() => detail.value?.sellerName || '校园卖家')
-const statusText = computed(() => detail.value?.statusDesc || '在售')
+const detailStatus = computed(() => Number(detail.value?.status))
+const statusText = computed(() => {
+  if (detail.value?.statusDesc) return detail.value.statusDesc
+  return GOODS_STATUS_LABEL_MAP[detailStatus.value] || '未知状态'
+})
+const canOrder = computed(() => detailStatus.value === GOODS_STATUS.ON_SALE)
 
 const sellingTags = computed(() => {
   const tags = []
@@ -57,6 +63,10 @@ function goBack() {
 
 function goOrderDraft() {
   if (!detail.value?.id) return
+  if (!canOrder.value) {
+    ElMessage.warning(`当前商品状态为${statusText.value}，不可下单`)
+    return
+  }
   router.push({
     path: '/order/create',
     query: {
@@ -287,9 +297,12 @@ onMounted(loadDetail)
           </div>
 
           <div class="action-row">
-            <el-button type="primary" @click="goOrderDraft">立即下单</el-button>
+            <el-button type="primary" :disabled="!canOrder" @click="goOrderDraft">
+              {{ canOrder ? '立即下单' : '当前不可下单' }}
+            </el-button>
             <el-button plain @click="router.push('/my-order')">查看订单中心</el-button>
           </div>
+          <p v-if="!canOrder" class="order-tip">仅在售商品可下单，当前商品状态：{{ statusText }}</p>
         </aside>
       </section>
 
@@ -582,6 +595,12 @@ onMounted(loadDetail)
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.order-tip {
+  margin: -4px 0 0;
+  color: #d14444;
+  font-size: 13px;
 }
 
 .section-head h2 {

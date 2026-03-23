@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { fetchPublicGoodsById } from '@/api/goods'
 import { submitOrder } from '@/api/order'
+import { GOODS_STATUS, GOODS_STATUS_LABEL_MAP } from '@/constants/goods'
 import { formatCurrency } from '@/utils/format'
 
 const route = useRoute()
@@ -27,6 +28,12 @@ const goodsId = computed(() => {
 
 const sellerName = computed(() => goodsDetail.value?.sellerName || route.query.sellerName || '校园卖家')
 const orderAmount = computed(() => formatCurrency(goodsDetail.value?.price || route.query.amount || 0))
+const goodsStatus = computed(() => Number(goodsDetail.value?.status))
+const goodsStatusText = computed(() => {
+  if (goodsDetail.value?.statusDesc) return goodsDetail.value.statusDesc
+  return GOODS_STATUS_LABEL_MAP[goodsStatus.value] || '未知状态'
+})
+const canSubmitOrder = computed(() => goodsStatus.value === GOODS_STATUS.ON_SALE)
 
 function goBack() {
   if (goodsId.value) {
@@ -46,6 +53,9 @@ async function loadGoodsDetail() {
   loading.value = true
   try {
     goodsDetail.value = await fetchPublicGoodsById(goodsId.value)
+    if (!canSubmitOrder.value) {
+      ElMessage.warning(`当前商品状态为${goodsStatusText.value}，不可下单`)
+    }
     if (!form.meetLocation && goodsDetail.value?.location) {
       form.meetLocation = goodsDetail.value.location
     }
@@ -59,6 +69,14 @@ async function loadGoodsDetail() {
 async function handleSubmitOrder() {
   if (!goodsId.value) {
     ElMessage.warning('缺少商品编号')
+    return
+  }
+  if (!goodsDetail.value) {
+    ElMessage.warning('商品信息加载失败，请返回详情页重试')
+    return
+  }
+  if (!canSubmitOrder.value) {
+    ElMessage.warning(`当前商品状态为${goodsStatusText.value}，不可下单`)
     return
   }
   if (!form.meetLocation.trim()) {
@@ -151,6 +169,16 @@ onMounted(loadGoodsDetail)
             </div>
           </template>
 
+          <el-alert
+            v-if="goodsDetail && !canSubmitOrder"
+            class="status-alert"
+            title="当前商品不可下单"
+            type="warning"
+            :closable="false"
+            show-icon
+            :description="`商品状态：${goodsStatusText}，仅在售商品支持下单。`"
+          />
+
           <el-form label-position="top" class="order-form">
             <el-form-item label="交易地点">
               <el-input v-model="form.meetLocation" placeholder="例如：主教学楼一层大厅" />
@@ -177,8 +205,14 @@ onMounted(loadGoodsDetail)
               />
             </el-form-item>
 
-            <el-button type="primary" class="submit-btn" :loading="submitting" @click="handleSubmitOrder">
-              {{ submitting ? '提交中...' : '提交订单并去支付' }}
+            <el-button
+              type="primary"
+              class="submit-btn"
+              :loading="submitting"
+              :disabled="!canSubmitOrder"
+              @click="handleSubmitOrder"
+            >
+              {{ submitting ? '提交中...' : canSubmitOrder ? '提交订单并去支付' : '当前不可提交' }}
             </el-button>
           </el-form>
         </el-card>
@@ -354,6 +388,10 @@ onMounted(loadGoodsDetail)
 
 .order-form {
   display: grid;
+}
+
+.status-alert {
+  margin-bottom: 12px;
 }
 
 .full-width {

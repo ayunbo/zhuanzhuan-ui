@@ -51,6 +51,12 @@ const routes = [
     meta: { title: '商品详情' },
   },
   {
+    path: '/seller/:sellerId',
+    name: 'seller-space',
+    component: () => import('@/views/SellerSpaceView.vue'),
+    meta: { title: '卖家空间' },
+  },
+  {
     path: '/order/create',
     name: 'order-create',
     component: () => import('@/views/OrderCreateView.vue'),

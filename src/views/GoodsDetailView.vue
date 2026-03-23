@@ -75,6 +75,23 @@ function goDetail(item) {
   router.push(`/goods/${item.id}`)
 }
 
+function goSellerSpace() {
+  if (!detail.value?.sellerId) return
+  router.push({
+    name: 'seller-space',
+    params: {
+      sellerId: String(detail.value.sellerId),
+    },
+    query: {
+      name: detail.value.sellerName || '',
+      avatar: detail.value.sellerAvatar || '',
+      campus: detail.value.sellerCampus || '',
+      scoreAvg: String(detail.value.sellerScoreAvg ?? ''),
+      reviewCount: String(detail.value.sellerReviewCount ?? ''),
+    },
+  })
+}
+
 function parseImageUrls(images) {
   if (!images) return []
   return String(images)
@@ -90,6 +107,20 @@ function getReviewImages(review) {
 function getReviewerName(review) {
   if (review?.reviewerName) return review.reviewerName
   return review?.anonymous === 1 ? '匿名用户' : '用户'
+}
+
+function reviewLevelText(score) {
+  const value = Number(score || 0)
+  if (value >= 5) return '好评'
+  if (value >= 3) return '中评'
+  return '差评'
+}
+
+function reviewLevelClass(score) {
+  const value = Number(score || 0)
+  if (value >= 5) return 'level-good'
+  if (value >= 3) return 'level-neutral'
+  return 'level-bad'
 }
 
 async function loadRecommend(categoryId, currentId) {
@@ -182,13 +213,19 @@ onMounted(loadDetail)
     <template v-else-if="detail">
       <section class="seller-banner zz-white-panel">
         <div class="seller-banner__main">
-          <div class="seller-avatar">{{ sellerName.slice(0, 1) }}</div>
+          <button type="button" class="seller-avatar-btn" @click="goSellerSpace">
+            <el-avatar :size="62" :src="detail.sellerAvatar || undefined">{{ sellerName.slice(0, 1) }}</el-avatar>
+          </button>
           <div class="seller-copy">
             <h2>{{ sellerName }}</h2>
             <p>{{ detail.location || '校内当面交易' }} · 商品状态：{{ statusText }}</p>
+            <p class="seller-score">
+              卖家评分 {{ Number(detail.sellerScoreAvg || 0).toFixed(1) }} 分（{{ Number(detail.sellerReviewCount || 0) }} 条评价）
+            </p>
           </div>
         </div>
         <div class="seller-banner__actions">
+          <el-button @click="goSellerSpace">查看卖家空间</el-button>
           <el-button plain @click="goBack">返回列表</el-button>
         </div>
       </section>
@@ -260,7 +297,7 @@ onMounted(loadDetail)
         <div class="section-head">
           <div>
             <h2>商品评价</h2>
-            <p>仅展示已完成订单买家的真实评价，支持匿名显示。</p>
+            <p>仅展示已完成订单买家的真实评价。1-2 分为差评，3-4 分为中评，5 分为好评。</p>
           </div>
         </div>
 
@@ -275,7 +312,12 @@ onMounted(loadDetail)
                     <span>{{ formatDateTime(item.createTime) }}</span>
                   </div>
                 </div>
-                <el-rate :model-value="Number(item.score || 0)" disabled text-color="#ff9900" />
+                <div class="review-score">
+                  <el-rate :model-value="Number(item.score || 0)" disabled text-color="#ff9900" />
+                  <span class="review-level" :class="reviewLevelClass(item.score)">
+                    {{ reviewLevelText(item.score) }}
+                  </span>
+                </div>
               </div>
 
               <p class="review-content" :class="{ empty: !item.content }">
@@ -365,16 +407,16 @@ onMounted(loadDetail)
   gap: 14px;
 }
 
-.seller-avatar {
-  width: 62px;
-  height: 62px;
+.seller-avatar-btn {
+  padding: 0;
+  border: 0;
   border-radius: 50%;
-  background: var(--zz-yellow-soft);
-  display: grid;
-  place-items: center;
-  font-size: 28px;
-  font-weight: 800;
-  color: var(--zz-black);
+  background: transparent;
+  cursor: pointer;
+}
+
+.seller-avatar-btn:hover {
+  transform: translateY(-1px);
 }
 
 .seller-copy h2 {
@@ -385,6 +427,10 @@ onMounted(loadDetail)
 .seller-copy p {
   margin-top: 6px;
   color: var(--zz-text-secondary);
+}
+
+.seller-copy .seller-score {
+  color: #5f6f7c;
 }
 
 .detail-main {
@@ -572,6 +618,12 @@ onMounted(loadDetail)
   gap: 12px;
 }
 
+.review-score {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .review-user {
   display: flex;
   align-items: center;
@@ -591,6 +643,31 @@ onMounted(loadDetail)
 .review-user-copy span {
   font-size: 12px;
   color: var(--zz-text-light);
+}
+
+.review-level {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.review-level.level-good {
+  color: #1f9f59;
+  background: #e9f8ef;
+}
+
+.review-level.level-neutral {
+  color: #d07f21;
+  background: #fff3e3;
+}
+
+.review-level.level-bad {
+  color: #d14444;
+  background: #ffeaea;
 }
 
 .review-content {
@@ -649,6 +726,11 @@ onMounted(loadDetail)
   }
 
   .review-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .review-score {
     align-items: flex-start;
     flex-direction: column;
   }

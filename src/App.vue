@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { 
@@ -15,9 +15,26 @@ import { ElMessage } from 'element-plus'
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const navKeyword = ref('')
 
 const isAuthPage = computed(() => ['login', 'register'].includes(route.name))
 const displayName = computed(() => authStore.user.name || authStore.user.studentNo || '用户')
+
+watch(
+  () => route.query.keyword,
+  (keyword) => {
+    navKeyword.value = typeof keyword === 'string' ? keyword : ''
+  },
+  { immediate: true },
+)
+
+const handleGlobalSearch = () => {
+  const keyword = navKeyword.value.trim()
+  router.push({
+    path: '/goods',
+    query: keyword ? { keyword } : {},
+  })
+}
 
 const handleLogout = () => {
   authStore.logout()
@@ -41,9 +58,12 @@ const handleLogout = () => {
         <div class="nav-center">
           <div class="search-bar">
             <el-input
+              v-model="navKeyword"
               placeholder="搜寻校内闲置宝贝..."
               :prefix-icon="Search"
               clearable
+              @keyup.enter="handleGlobalSearch"
+              @clear="handleGlobalSearch"
             />
           </div>
         </div>

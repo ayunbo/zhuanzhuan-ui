@@ -76,6 +76,25 @@ function readStatusText(msg) {
   return Number(msg.readStatus) === 1 ? '已读' : '未读'
 }
 
+function applyReadReceipt(receipt) {
+  if (!receipt) return
+  if (Number(receipt.sessionId) !== Number(activeSessionId.value)) return
+
+  const targetIds = new Set((receipt.messageIds || []).map((id) => Number(id)))
+  if (!targetIds.size) return
+
+  messageList.value = messageList.value.map((item) => {
+    if (!item?.mine) return item
+    if (!targetIds.has(Number(item.id))) return item
+
+    return {
+      ...item,
+      readStatus: 1,
+      readTime: receipt.readTime || item.readTime,
+    }
+  })
+}
+
 function scrollToBottom() {
   if (!messageScrollRef.value) return
   const wrapRef = messageScrollRef.value.wrapRef
@@ -216,6 +235,13 @@ watch(
     if (!incoming.mine) {
       await markCurrentSessionRead(activeSessionId.value)
     }
+  },
+)
+
+watch(
+  () => chatStore.lastReadReceipt?.__stamp,
+  () => {
+    applyReadReceipt(chatStore.lastReadReceipt)
   },
 )
 
@@ -614,7 +640,7 @@ onUnmounted(() => {
 .composer {
   border-top: 1px solid #e8edf6;
   background: #ffffff;
-  padding: 12px;
+  padding: 16px;
   display: flex;
   align-items: flex-end;
   gap: 10px;
@@ -622,15 +648,15 @@ onUnmounted(() => {
 
 .composer textarea {
   flex: 1;
-  min-height: 42px;
-  max-height: 120px;
+  min-height: 110px;
+  max-height: 280px;
   border: 1px solid #d8e1ef;
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   outline: none;
-  resize: none;
+  resize: vertical;
   font: inherit;
-  line-height: 1.4;
+  line-height: 1.6;
 }
 
 .composer textarea:focus {

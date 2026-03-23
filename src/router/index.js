@@ -51,7 +51,7 @@ const router = createRouter({
     {
       path: '/chat',
       name: 'chat',
-      component: () => import('@/views/ChatView.vue'),
+      component: () => import('@/views/chat/ChatView.vue'),
       meta: {
         title: '聊天消息',
         requiresAuth: true,

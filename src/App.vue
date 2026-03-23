@@ -10,7 +10,7 @@ import {
   User,
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import FloatingMessageCapsule from '@/components/FloatingMessageCapsule.vue'
+import FloatingMessageCapsule from '@/components/chat/FloatingMessageCapsule.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 

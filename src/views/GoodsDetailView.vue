@@ -1,10 +1,12 @@
-<script setup>
+﻿<script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import MarketplaceEmptyState from '@/components/MarketplaceEmptyState.vue'
 import MarketplaceProductCard from '@/components/MarketplaceProductCard.vue'
 import { fetchPublicGoodsById, fetchPublicGoodsPage } from '@/api/goods'
+import { getGoodsReviewPage } from '@/api/review'
+import { formatDateTime } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -13,6 +15,12 @@ const loading = ref(false)
 const detail = ref(null)
 const recommendGoods = ref([])
 const activeImageIndex = ref(0)
+
+const reviewLoading = ref(false)
+const reviewRecords = ref([])
+const reviewTotal = ref(0)
+const reviewPage = ref(1)
+const reviewPageSize = ref(5)
 
 const galleryImages = computed(() => {
   if (!detail.value) return []
@@ -30,7 +38,7 @@ const galleryImages = computed(() => {
 })
 
 const currentImage = computed(() => galleryImages.value[activeImageIndex.value] || '')
-const priceText = computed(() => `¥${Number(detail.value?.price || 0).toFixed(2)}`)
+const priceText = computed(() => `楼${Number(detail.value?.price || 0).toFixed(2)}`)
 const sellerName = computed(() => detail.value?.sellerName || '校园卖家')
 const statusText = computed(() => detail.value?.statusDesc || '在售')
 
@@ -39,7 +47,7 @@ const sellingTags = computed(() => {
   if (detail.value?.categoryName) tags.push(detail.value.categoryName)
   if (detail.value?.quality) tags.push(`成色 ${detail.value.quality}`)
   if (detail.value?.location) tags.push(detail.value.location)
-  if (detail.value?.createTime) tags.push(detail.value.createTime)
+  if (detail.value?.createTime) tags.push(formatDateTime(detail.value.createTime))
   return tags
 })
 
@@ -67,6 +75,23 @@ function goDetail(item) {
   router.push(`/goods/${item.id}`)
 }
 
+function parseImageUrls(images) {
+  if (!images) return []
+  return String(images)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function getReviewImages(review) {
+  return parseImageUrls(review?.images)
+}
+
+function getReviewerName(review) {
+  if (review?.reviewerName) return review.reviewerName
+  return review?.anonymous === 1 ? '匿名用户' : '用户'
+}
+
 async function loadRecommend(categoryId, currentId) {
   try {
     const data = await fetchPublicGoodsPage({
@@ -81,6 +106,35 @@ async function loadRecommend(categoryId, currentId) {
   }
 }
 
+async function loadReviews(goodsId) {
+  if (!goodsId) {
+    reviewRecords.value = []
+    reviewTotal.value = 0
+    return
+  }
+
+  reviewLoading.value = true
+  try {
+    const data = await getGoodsReviewPage(goodsId, {
+      page: reviewPage.value,
+      pageSize: reviewPageSize.value,
+    })
+    reviewRecords.value = data?.records || []
+    reviewTotal.value = Number(data?.total || 0)
+  } catch (error) {
+    reviewRecords.value = []
+    reviewTotal.value = 0
+    ElMessage.error(error.message || '评价加载失败')
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+async function onReviewPageChange(nextPage) {
+  reviewPage.value = nextPage
+  await loadReviews(detail.value?.id)
+}
+
 async function loadDetail() {
   const id = Number(route.params.id)
   if (!Number.isFinite(id) || id <= 0) {
@@ -92,9 +146,13 @@ async function loadDetail() {
   try {
     detail.value = await fetchPublicGoodsById(id)
     activeImageIndex.value = 0
-    await loadRecommend(detail.value?.categoryId, id)
+    reviewPage.value = 1
+    await Promise.all([loadRecommend(detail.value?.categoryId, id), loadReviews(id)])
   } catch (error) {
     detail.value = null
+    recommendGoods.value = []
+    reviewRecords.value = []
+    reviewTotal.value = 0
     ElMessage.error(error.message || '商品详情加载失败')
   } finally {
     loading.value = false
@@ -116,7 +174,7 @@ onMounted(loadDetail)
     <MarketplaceEmptyState
       v-if="!loading && !detail"
       title="商品不存在"
-      description="当前商品详情无法展示，可能已经下架或被删除。"
+      description="当前商品详情无法展示，可能已下架或被删除。"
       action-text="返回商品广场"
       @action="goBack"
     />
@@ -127,7 +185,7 @@ onMounted(loadDetail)
           <div class="seller-avatar">{{ sellerName.slice(0, 1) }}</div>
           <div class="seller-copy">
             <h2>{{ sellerName }}</h2>
-            <p>{{ detail.location || '校内当面交易' }} ｜ 商品状态：{{ statusText }}</p>
+            <p>{{ detail.location || '校内当面交易' }} · 商品状态：{{ statusText }}</p>
           </div>
         </div>
         <div class="seller-banner__actions">
@@ -198,11 +256,71 @@ onMounted(loadDetail)
         </aside>
       </section>
 
+      <section class="review-panel zz-white-panel">
+        <div class="section-head">
+          <div>
+            <h2>商品评价</h2>
+            <p>仅展示已完成订单买家的真实评价，支持匿名显示。</p>
+          </div>
+        </div>
+
+        <div v-loading="reviewLoading" class="review-wrap">
+          <div v-if="reviewRecords.length" class="review-list">
+            <article v-for="item in reviewRecords" :key="item.id" class="review-item">
+              <div class="review-head">
+                <div class="review-user">
+                  <el-avatar :size="40" :src="item.reviewerAvatar">{{ getReviewerName(item).slice(0, 1) }}</el-avatar>
+                  <div class="review-user-copy">
+                    <strong>{{ getReviewerName(item) }}</strong>
+                    <span>{{ formatDateTime(item.createTime) }}</span>
+                  </div>
+                </div>
+                <el-rate :model-value="Number(item.score || 0)" disabled text-color="#ff9900" />
+              </div>
+
+              <p class="review-content" :class="{ empty: !item.content }">
+                {{ item.content || '该用户未填写文字评价。' }}
+              </p>
+
+              <div v-if="getReviewImages(item).length" class="review-images">
+                <el-image
+                  v-for="(url, index) in getReviewImages(item)"
+                  :key="`${item.id}-${url}-${index}`"
+                  :src="url"
+                  :preview-src-list="getReviewImages(item)"
+                  :initial-index="index"
+                  fit="cover"
+                  preview-teleported
+                  class="review-thumb"
+                />
+              </div>
+            </article>
+          </div>
+
+          <MarketplaceEmptyState
+            v-else
+            title="暂无评价"
+            description="当前商品还没有评价记录，完成交易后买家可提交评价。"
+          />
+        </div>
+
+        <el-pagination
+          v-if="reviewTotal > reviewPageSize"
+          class="review-pager"
+          background
+          layout="prev, pager, next"
+          :current-page="reviewPage"
+          :page-size="reviewPageSize"
+          :total="reviewTotal"
+          @current-change="onReviewPageChange"
+        />
+      </section>
+
       <section class="recommend-panel zz-white-panel">
         <div class="section-head">
           <div>
             <h2>为你推荐</h2>
-            <p>同类商品继续逛，页面结构参考你给的详情页样式。</p>
+            <p>同类商品继续逛，看看还有没有更合适的选择。</p>
           </div>
         </div>
 
@@ -229,6 +347,7 @@ onMounted(loadDetail)
 <style scoped>
 .seller-banner,
 .detail-main,
+.review-panel,
 .recommend-panel {
   padding: 18px;
 }
@@ -419,13 +538,96 @@ onMounted(loadDetail)
   flex-wrap: wrap;
 }
 
-.recommend-panel h2 {
+.section-head h2 {
   font-size: 28px;
 }
 
-.recommend-panel p {
+.section-head p {
   margin-top: 6px;
   color: var(--zz-text-secondary);
+}
+
+.review-wrap {
+  margin-top: 18px;
+}
+
+.review-list {
+  display: grid;
+  gap: 14px;
+}
+
+.review-item {
+  padding: 16px;
+  border: 1px solid var(--zz-border);
+  border-radius: 18px;
+  background: #fafafa;
+  display: grid;
+  gap: 10px;
+}
+
+.review-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.review-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.review-user-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.review-user-copy strong {
+  color: var(--zz-black);
+  font-size: 15px;
+}
+
+.review-user-copy span {
+  font-size: 12px;
+  color: var(--zz-text-light);
+}
+
+.review-content {
+  margin: 0;
+  color: var(--zz-text);
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.review-content.empty {
+  color: var(--zz-text-light);
+}
+
+.review-images {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.review-thumb {
+  width: 88px;
+  height: 88px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--zz-border);
+}
+
+.review-thumb :deep(.el-image__inner) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: zoom-in;
+}
+
+.review-pager {
+  margin-top: 16px;
+  justify-content: flex-end;
 }
 
 .recommend-grid {
@@ -446,6 +648,11 @@ onMounted(loadDetail)
     grid-template-columns: 1fr;
   }
 
+  .review-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .recommend-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -464,6 +671,10 @@ onMounted(loadDetail)
   .meta-grid,
   .recommend-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .review-pager {
+    justify-content: center;
   }
 }
 </style>

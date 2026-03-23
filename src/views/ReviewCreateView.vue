@@ -28,14 +28,32 @@ const form = reactive({
 
 const orderId = computed(() => Number(route.query.orderId || 0))
 
+const isBuyer = computed(() => {
+  if (!detail.value) return false
+  return Number(detail.value.buyerId) === Number(authStore.user.id)
+})
+
+const isSeller = computed(() => {
+  if (!detail.value) return false
+  return Number(detail.value.sellerId) === Number(authStore.user.id)
+})
+
 const canSubmit = computed(() => {
   if (!detail.value) return false
   if (existingReview.value) return false
   if (Number(detail.value.status) !== 2) return false
-  return Number(detail.value.buyerId) === Number(authStore.user.id)
+  return isBuyer.value
 })
 
 const existingReviewImages = computed(() => parseImageUrls(existingReview.value?.images))
+const pageTitle = computed(() => (canSubmit.value ? '提交评价' : '订单评价'))
+const pendingReviewText = computed(() => {
+  if (!detail.value) return '暂无评价信息'
+  if (Number(detail.value.status) !== 2) return '订单尚未完成，暂不支持评价。'
+  if (isSeller.value) return '买家暂未提交评价。'
+  if (isBuyer.value) return '当前订单暂无评价。'
+  return '你没有权限查看该订单评价。'
+})
 
 function statusText(status) {
   const map = {
@@ -160,7 +178,7 @@ onMounted(() => {
 <template>
   <div class="page">
     <div class="header">
-      <h2>提交评价</h2>
+      <h2>{{ pageTitle }}</h2>
       <button class="ghost-btn" @click="goBack">返回订单</button>
     </div>
 
@@ -193,7 +211,7 @@ onMounted(() => {
         </div>
       </section>
 
-      <section class="card" v-else>
+      <section class="card" v-else-if="canSubmit">
         <h3>评价内容</h3>
 
         <div class="form-row">
@@ -269,9 +287,11 @@ onMounted(() => {
           {{ submitting ? '提交中...' : '确认提交评价' }}
         </button>
 
-        <p v-if="!canSubmit" class="warn">
-          仅“已完成订单”的买家可提交一次评价。
-        </p>
+      </section>
+
+      <section class="card" v-else>
+        <h3>暂无可展示评价</h3>
+        <p>{{ pendingReviewText }}</p>
       </section>
     </template>
   </div>
@@ -435,8 +455,4 @@ textarea {
   cursor: not-allowed;
 }
 
-.warn {
-  margin-top: 10px;
-  color: #d97706;
-}
 </style>

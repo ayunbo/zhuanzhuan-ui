@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+﻿import { createRouter, createWebHistory } from 'vue-router'
 import { getStoredToken } from '@/utils/auth'
 
 const routes = [
@@ -85,6 +85,12 @@ const routes = [
     name: 'order-detail',
     component: () => import('@/views/OrderDetailView.vue'),
     meta: { title: '订单详情', requiresAuth: true },
+  },
+  {
+    path: '/order/review',
+    name: 'order-review',
+    component: () => import('@/views/ReviewCreateView.vue'),
+    meta: { title: '提交评价', requiresAuth: true },
   },
   {
     path: '/:pathMatch(.*)*',

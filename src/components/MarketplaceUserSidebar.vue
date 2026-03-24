@@ -1,9 +1,9 @@
 <script setup>
-import { CollectionTag, Goods, Postcard, Star, Tickets, User } from '@element-plus/icons-vue'
+import { Clock, CollectionTag, Goods, Postcard, Star, Tickets, User } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
-const props = defineProps({
+defineProps({
   activeKey: {
     type: String,
     default: 'profile',
@@ -36,6 +36,7 @@ const menuSections = computed(() => [
     title: '账户设置',
     items: [
       { key: 'favorites', label: '我的收藏', icon: Star, action: () => router.push('/favorites') },
+      { key: 'history', label: '浏览历史', icon: Clock, action: () => router.push('/history') },
       { key: 'seller-auth', label: '卖家认证', icon: Postcard, action: () => router.push('/seller-auth') },
     ],
   },

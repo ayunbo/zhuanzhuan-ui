@@ -256,7 +256,11 @@ async function loadDetail() {
     detail.value = await fetchPublicGoodsById(id)
     activeImageIndex.value = 0
     reviewPage.value = 1
-    await Promise.all([loadRecommend(detail.value?.categoryId, id), loadReviews(id), loadFavoriteStatus(id)])
+    await Promise.all([
+      loadRecommend(detail.value?.categoryId, id),
+      loadReviews(id),
+      loadFavoriteStatus(id),
+    ])
   } catch (error) {
     detail.value = null
     recommendGoods.value = []
@@ -387,6 +391,7 @@ onMounted(loadDetail)
               <span>{{ favorited ? '已收藏' : '收藏' }}</span>
             </el-button>
             <el-button plain @click="router.push('/favorites')">我的收藏</el-button>
+            <el-button plain @click="router.push('/history')">浏览历史</el-button>
             <el-button plain @click="router.push('/my-order')">查看订单中心</el-button>
           </div>
           <p v-if="!canOrder" class="order-tip">仅在售商品可下单，当前商品状态：{{ statusText }}</p>

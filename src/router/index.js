@@ -33,6 +33,12 @@ const routes = [
     meta: { title: '我的收藏', requiresAuth: true },
   },
   {
+    path: '/history',
+    name: 'history',
+    component: () => import('@/views/BrowseHistoryView.vue'),
+    meta: { title: '浏览历史', requiresAuth: true },
+  },
+  {
     path: '/seller-auth',
     name: 'sellerAuth',
     component: () => import('@/views/SellerAuthView.vue'),

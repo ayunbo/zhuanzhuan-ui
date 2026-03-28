@@ -1,10 +1,12 @@
-<script setup>
+﻿<script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import MarketplaceEmptyState from '@/components/MarketplaceEmptyState.vue'
 import MarketplaceProductCard from '@/components/MarketplaceProductCard.vue'
 import { fetchPublicGoodsPage, fetchSellerSpace } from '@/api/goods'
+import { getSellerReviewPage } from '@/api/review'
+import { formatDateTime } from '@/utils/format'
 
 const SELLER_GOODS_TABS = [
   { key: 'onSale', label: '在售商品', status: 3 },
@@ -16,13 +18,25 @@ const router = useRouter()
 
 const sellerLoading = ref(false)
 const goodsLoading = ref(false)
+const reviewsLoading = ref(false)
+
 const seller = ref(createSellerDraftFromRoute())
 const records = ref([])
 const activeTab = ref('onSale')
 
+const reviewRecords = ref([])
+const activeReviewFilter = ref(0)
+const reviewStats = ref(createEmptyReviewStats())
+
 const pager = reactive({
   page: 1,
   pageSize: 10,
+  total: 0,
+})
+
+const reviewPager = reactive({
+  page: 1,
+  pageSize: 5,
   total: 0,
 })
 
@@ -45,6 +59,32 @@ const sellerReviewCount = computed(() => Number(seller.value?.sellerReviewCount 
 const onSaleCount = computed(() => Number(seller.value?.onSaleCount || 0))
 const soldCount = computed(() => Number(seller.value?.soldCount || 0))
 
+const reviewFilterTabs = computed(() => [
+  { key: 0, label: '全部评价', count: Number(reviewStats.value.totalCount || 0) },
+  { key: 1, label: '好评', count: Number(reviewStats.value.goodCount || 0) },
+  { key: 2, label: '中评', count: Number(reviewStats.value.neutralCount || 0) },
+  { key: 3, label: '差评', count: Number(reviewStats.value.badCount || 0) },
+])
+
+const starStats = computed(() => {
+  const total = Number(reviewStats.value.totalCount || 0)
+  const list = [
+    { score: 5, label: '5 星', count: Number(reviewStats.value.score5Count || 0) },
+    { score: 4, label: '4 星', count: Number(reviewStats.value.score4Count || 0) },
+    { score: 3, label: '3 星', count: Number(reviewStats.value.score3Count || 0) },
+    { score: 2, label: '2 星', count: Number(reviewStats.value.score2Count || 0) },
+    { score: 1, label: '1 星', count: Number(reviewStats.value.score1Count || 0) },
+  ]
+
+  return list.map((item) => {
+    const ratio = total > 0 ? Number(((item.count / total) * 100).toFixed(2)) : 0
+    return {
+      ...item,
+      ratio,
+    }
+  })
+})
+
 function createSellerDraftFromRoute() {
   const score = Number(route.query.scoreAvg)
   const reviewCount = Number(route.query.reviewCount)
@@ -57,6 +97,20 @@ function createSellerDraftFromRoute() {
     sellerReviewCount: Number.isFinite(reviewCount) ? reviewCount : 0,
     onSaleCount: 0,
     soldCount: 0,
+  }
+}
+
+function createEmptyReviewStats() {
+  return {
+    totalCount: 0,
+    goodCount: 0,
+    neutralCount: 0,
+    badCount: 0,
+    score5Count: 0,
+    score4Count: 0,
+    score3Count: 0,
+    score2Count: 0,
+    score1Count: 0,
   }
 }
 
@@ -74,12 +128,54 @@ function scoreLevelClass(score) {
   return 'level-bad'
 }
 
+function reviewLevelText(score) {
+  const value = Number(score || 0)
+  if (value >= 5) return '好评'
+  if (value >= 3) return '中评'
+  return '差评'
+}
+
+function reviewLevelClass(score) {
+  const value = Number(score || 0)
+  if (value >= 5) return 'level-good'
+  if (value >= 3) return 'level-neutral'
+  return 'level-bad'
+}
+
 function toScore(value) {
   const score = Number(value)
   if (!Number.isFinite(score)) {
     return '0.0'
   }
   return score.toFixed(1)
+}
+
+function formatPercent(ratio) {
+  const value = Number(ratio)
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0%'
+  }
+  if (value >= 99.95) {
+    return '100%'
+  }
+  return `${value.toFixed(value < 10 ? 1 : 0)}%`
+}
+
+function parseImageUrls(images) {
+  if (!images) return []
+  return String(images)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function getReviewImages(review) {
+  return parseImageUrls(review?.images)
+}
+
+function getReviewerName(review) {
+  if (review?.reviewerName) return review.reviewerName
+  return review?.anonymous === 1 ? '匿名用户' : '用户'
 }
 
 async function loadSellerSpace() {
@@ -129,6 +225,38 @@ async function loadGoods() {
   }
 }
 
+async function loadSellerReviews() {
+  if (!sellerId.value) {
+    reviewRecords.value = []
+    reviewPager.total = 0
+    reviewStats.value = createEmptyReviewStats()
+    return
+  }
+
+  reviewsLoading.value = true
+  try {
+    const data = await getSellerReviewPage(sellerId.value, {
+      page: reviewPager.page,
+      pageSize: reviewPager.pageSize,
+      scoreType: activeReviewFilter.value,
+    })
+
+    reviewRecords.value = Array.isArray(data?.records) ? data.records : []
+    reviewPager.total = Number(data?.total || 0)
+    reviewStats.value = {
+      ...createEmptyReviewStats(),
+      ...(data?.stats || {}),
+    }
+  } catch (error) {
+    reviewRecords.value = []
+    reviewPager.total = 0
+    reviewStats.value = createEmptyReviewStats()
+    ElMessage.error(error.message || '卖家评价加载失败')
+  } finally {
+    reviewsLoading.value = false
+  }
+}
+
 function goGoodsDetail(item) {
   if (!item?.id) return
   router.push(`/goods/${item.id}`)
@@ -147,6 +275,15 @@ function changeTab(tabKey) {
   loadGoods()
 }
 
+function changeReviewFilter(scoreType) {
+  if (scoreType === activeReviewFilter.value) {
+    return
+  }
+  activeReviewFilter.value = scoreType
+  reviewPager.page = 1
+  loadSellerReviews()
+}
+
 function handlePageChange(page) {
   pager.page = page
   loadGoods()
@@ -158,6 +295,11 @@ function handleSizeChange(size) {
   loadGoods()
 }
 
+function handleReviewPageChange(page) {
+  reviewPager.page = page
+  loadSellerReviews()
+}
+
 watch(
   () => route.params.sellerId,
   () => {
@@ -165,14 +307,21 @@ watch(
     activeTab.value = 'onSale'
     pager.page = 1
     pager.total = 0
+
+    activeReviewFilter.value = 0
+    reviewPager.page = 1
+    reviewPager.total = 0
+    reviewStats.value = createEmptyReviewStats()
+
     loadSellerSpace()
     loadGoods()
+    loadSellerReviews()
   },
 )
 
 onMounted(async () => {
   await loadSellerSpace()
-  await loadGoods()
+  await Promise.all([loadGoods(), loadSellerReviews()])
 })
 </script>
 
@@ -269,12 +418,100 @@ onMounted(async () => {
         />
       </div>
     </section>
+
+    <section class="review-board zz-white-panel">
+      <div class="review-head">
+        <div>
+          <h2>卖家评价</h2>
+          <p>支持按好评、中评、差评筛选，并统计各星级人数比例。</p>
+        </div>
+        <div class="tab-row">
+          <button
+            v-for="tab in reviewFilterTabs"
+            :key="tab.key"
+            type="button"
+            class="tab-btn"
+            :class="{ active: activeReviewFilter === tab.key }"
+            @click="changeReviewFilter(tab.key)"
+          >
+            {{ tab.label }}（{{ tab.count }}）
+          </button>
+        </div>
+      </div>
+
+      <div class="review-stat-grid">
+        <article v-for="item in starStats" :key="item.score" class="review-stat-item">
+          <span class="review-stat-label">{{ item.label }}</span>
+          <div class="review-stat-track">
+            <span class="review-stat-fill" :style="{ width: `${item.ratio}%` }" />
+          </div>
+          <span class="review-stat-meta">{{ item.count }} 人 · {{ formatPercent(item.ratio) }}</span>
+        </article>
+      </div>
+
+      <div v-loading="reviewsLoading" class="review-body">
+        <div v-if="reviewRecords.length" class="review-list">
+          <article v-for="item in reviewRecords" :key="item.id" class="review-item">
+            <div class="review-item-head">
+              <div class="review-user">
+                <el-avatar :size="40" :src="item.reviewerAvatar">{{ getReviewerName(item).slice(0, 1) }}</el-avatar>
+                <div class="review-user-copy">
+                  <strong>{{ getReviewerName(item) }}</strong>
+                  <span>{{ formatDateTime(item.createTime) }}</span>
+                </div>
+              </div>
+              <div class="review-score">
+                <el-rate :model-value="Number(item.score || 0)" disabled text-color="#ff9900" />
+                <span class="review-level" :class="reviewLevelClass(item.score)">
+                  {{ reviewLevelText(item.score) }}
+                </span>
+              </div>
+            </div>
+
+            <p class="review-content" :class="{ empty: !item.content }">
+              {{ item.content || '该用户未填写文字评价。' }}
+            </p>
+
+            <div v-if="getReviewImages(item).length" class="review-images">
+              <el-image
+                v-for="(url, index) in getReviewImages(item)"
+                :key="`${item.id}-${url}-${index}`"
+                :src="url"
+                :preview-src-list="getReviewImages(item)"
+                :initial-index="index"
+                fit="cover"
+                preview-teleported
+                class="review-thumb"
+              />
+            </div>
+          </article>
+        </div>
+
+        <MarketplaceEmptyState
+          v-else
+          title="暂无评价"
+          description="当前筛选条件下暂无评价，完成交易后买家可提交评价。"
+        />
+      </div>
+
+      <el-pagination
+        v-if="reviewPager.total > reviewPager.pageSize"
+        class="review-pager"
+        background
+        layout="prev, pager, next"
+        :current-page="reviewPager.page"
+        :page-size="reviewPager.pageSize"
+        :total="reviewPager.total"
+        @current-change="handleReviewPageChange"
+      />
+    </section>
   </div>
 </template>
 
 <style scoped>
 .seller-head,
-.goods-board {
+.goods-board,
+.review-board {
   padding: 18px;
 }
 
@@ -388,19 +625,22 @@ onMounted(async () => {
   color: var(--zz-black);
 }
 
-.board-head {
+.board-head,
+.review-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.board-head h2 {
+.board-head h2,
+.review-head h2 {
   font-size: 28px;
   color: var(--zz-black);
 }
 
-.board-head p {
+.board-head p,
+.review-head p {
   margin-top: 6px;
   color: var(--zz-text-secondary);
 }
@@ -410,6 +650,8 @@ onMounted(async () => {
   border-radius: 999px;
   background: #f5f5f5;
   padding: 4px;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .tab-btn {
@@ -429,7 +671,8 @@ onMounted(async () => {
   font-weight: 700;
 }
 
-.board-body {
+.board-body,
+.review-body {
   margin-top: 14px;
 }
 
@@ -439,7 +682,152 @@ onMounted(async () => {
   gap: 16px;
 }
 
-.pager-wrap {
+.review-stat-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+.review-stat-item {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.review-stat-label {
+  color: var(--zz-text-secondary);
+  font-size: 13px;
+}
+
+.review-stat-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #f2f2f2;
+  overflow: hidden;
+}
+
+.review-stat-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ffd266 0%, #ff8e4a 100%);
+}
+
+.review-stat-meta {
+  color: var(--zz-text-light);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.review-list {
+  display: grid;
+  gap: 14px;
+}
+
+.review-item {
+  padding: 16px;
+  border: 1px solid var(--zz-border);
+  border-radius: 18px;
+  background: #fafafa;
+  display: grid;
+  gap: 10px;
+}
+
+.review-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.review-score {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.review-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.review-user-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.review-user-copy strong {
+  color: var(--zz-black);
+  font-size: 15px;
+}
+
+.review-user-copy span {
+  font-size: 12px;
+  color: var(--zz-text-light);
+}
+
+.review-level {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.review-level.level-good {
+  color: #1f9f59;
+  background: #e9f8ef;
+}
+
+.review-level.level-neutral {
+  color: #d07f21;
+  background: #fff3e3;
+}
+
+.review-level.level-bad {
+  color: #d14444;
+  background: #ffeaea;
+}
+
+.review-content {
+  margin: 0;
+  color: var(--zz-text);
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.review-content.empty {
+  color: var(--zz-text-light);
+}
+
+.review-images {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.review-thumb {
+  width: 88px;
+  height: 88px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--zz-border);
+}
+
+.review-thumb :deep(.el-image__inner) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: zoom-in;
+}
+
+.pager-wrap,
+.review-pager {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
@@ -451,19 +839,36 @@ onMounted(async () => {
   }
 }
 
+@media (max-width: 1180px) {
+  .review-stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1080px) {
   .seller-head {
     grid-template-columns: 1fr;
     align-items: start;
   }
 
-  .board-head {
+  .board-head,
+  .review-head {
     align-items: flex-start;
     flex-direction: column;
   }
 
   .goods-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .review-item-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .review-score {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
@@ -472,7 +877,16 @@ onMounted(async () => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .pager-wrap {
+  .review-stat-item {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .review-stat-meta {
+    grid-column: 1 / -1;
+  }
+
+  .pager-wrap,
+  .review-pager {
     justify-content: center;
   }
 }

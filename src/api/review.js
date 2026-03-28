@@ -33,3 +33,11 @@ export function getGoodsReviewPage(goodsId, params) {
     params,
   })
 }
+
+export function getSellerReviewPage(sellerId, params) {
+  return request({
+    url: `/user/review/seller/${sellerId}`,
+    method: 'get',
+    params,
+  })
+}

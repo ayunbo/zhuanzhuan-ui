@@ -1,20 +1,33 @@
 <script setup>
-import { RouterView } from 'vue-router'
-import { ref } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ChevronDown, Search, ShoppingBag } from 'lucide-vue-next'
+import AuthDialog from '@/components/AuthDialog.vue'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { AUTH_CHANGED_EVENT, clearAuthSession, ensureLoggedIn, getAuthUser } from '@/utils/request'
 
+const route = useRoute()
 const searchKeyword = ref('')
+const userMenuOpen = ref(false)
+const hideChrome = computed(() => route.meta.hideChrome === true)
 
-const currentUser = {
-  name: '陈念',
-  campus: '南苑校区',
-  avatar: '陈',
+const currentUser = ref(getDisplayUser())
+const menuItems = ['我买到的', '我卖出的', '我的收藏', '退出登录']
+
+function getDisplayUser() {
+  const authUser = getAuthUser()
+  return {
+    name: authUser?.name || '未登录',
+    campus: authUser?.studentNo || '点击登录',
+    avatar: authUser?.name?.slice(0, 1)?.toLowerCase() || 'a',
+  }
 }
 
-const menuItems = ['我买到的', '我卖出的', '我的收藏', '退出登录']
+function syncAuthUser() {
+  currentUser.value = getDisplayUser()
+}
 
 function handleSearch() {
   const keyword = searchKeyword.value.trim() || '全部商品'
@@ -22,24 +35,61 @@ function handleSearch() {
   window.alert(`搜索功能演示：${keyword}`)
 }
 
+function openUserMenu() {
+  window.clearTimeout(closeUserMenu.timer)
+  userMenuOpen.value = true
+}
+
+function closeUserMenu() {
+  window.clearTimeout(closeUserMenu.timer)
+  closeUserMenu.timer = window.setTimeout(() => {
+    userMenuOpen.value = false
+  }, 120)
+}
+
 function handleMenuClick(item) {
+  userMenuOpen.value = false
+
+  if (item === '退出登录') {
+    clearAuthSession()
+    return
+  }
+
+  if (!ensureLoggedIn({ source: `menu-${item}` })) {
+    return
+  }
+
   console.log(`用户菜单点击: ${item}`)
   window.alert(`${item} 功能暂未接入`)
 }
 
 function handleOrderClick() {
+  if (!ensureLoggedIn({ source: 'order-entry' })) {
+    return
+  }
+
   console.log('订单入口点击')
   window.alert('订单页面暂未开放')
 }
+
+onMounted(() => {
+  window.addEventListener(AUTH_CHANGED_EVENT, syncAuthUser)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener(AUTH_CHANGED_EVENT, syncAuthUser)
+  window.clearTimeout(closeUserMenu.timer)
+})
 </script>
 
 <template>
   <div class="min-h-screen">
     <header
+      v-if="!hideChrome"
       class="fixed inset-x-0 top-0 z-50 border-b border-white/70 bg-white/88 backdrop-blur-xl"
     >
       <div
-        class="mx-auto flex max-w-[1280px] flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:gap-6 lg:px-8"
+        class="mx-auto flex max-w-[1480px] flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:gap-6 lg:px-8"
       >
         <div class="flex items-center gap-3">
           <div
@@ -54,7 +104,7 @@ function handleOrderClick() {
         </div>
 
         <form
-          class="flex flex-1 items-center gap-2 lg:mx-auto lg:max-w-2xl"
+          class="flex flex-1 items-center gap-2 lg:mx-auto lg:max-w-3xl"
           @submit.prevent="handleSearch"
         >
           <Input
@@ -70,20 +120,35 @@ function handleOrderClick() {
         </form>
 
         <div class="flex items-center justify-between gap-3 lg:justify-end">
-          <div class="group relative hidden sm:block">
+          <div
+            class="relative hidden sm:block"
+            @mouseenter="openUserMenu"
+            @mouseleave="closeUserMenu"
+          >
             <div
-              class="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-sm transition group-hover:border-brand-200 group-hover:shadow-md"
+              class="flex h-16 items-center gap-3 rounded-full border border-slate-200 bg-white px-4 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.35)] transition"
+              :class="userMenuOpen ? 'border-brand-200 shadow-md' : ''"
             >
-              <Avatar size="sm" :fallback="currentUser.avatar" />
+              <Avatar size="md" :fallback="currentUser.avatar" />
               <div class="text-left">
-                <p class="text-sm font-semibold text-slate-900">{{ currentUser.name }}</p>
+                <p class="text-[15px] font-semibold leading-none text-slate-900">
+                  {{ currentUser.name }}
+                </p>
                 <p class="text-xs text-slate-500">{{ currentUser.campus }}</p>
               </div>
-              <ChevronDown class="h-4 w-4 text-slate-400 transition group-hover:text-brand-500" />
+              <ChevronDown
+                class="h-4 w-4 text-slate-400 transition"
+                :class="userMenuOpen ? 'rotate-180 text-brand-500' : ''"
+              />
             </div>
 
+            <div v-if="userMenuOpen" class="absolute inset-x-0 top-full h-4" />
+
             <div
-              class="pointer-events-none absolute right-0 top-full z-20 mt-3 w-48 translate-y-2 rounded-3xl border border-slate-200 bg-white/96 p-2 text-left opacity-0 shadow-[0_24px_70px_-26px_rgba(15,23,42,0.28)] transition duration-200 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100"
+              v-if="userMenuOpen"
+              class="absolute right-0 top-full z-20 mt-3 w-48 rounded-3xl border border-slate-200 bg-white/96 p-2 text-left shadow-[0_24px_70px_-26px_rgba(15,23,42,0.28)]"
+              @mouseenter="openUserMenu"
+              @mouseleave="closeUserMenu"
             >
               <button
                 v-for="item in menuItems"
@@ -100,7 +165,7 @@ function handleOrderClick() {
           <Button
             variant="outline"
             size="sm"
-            class="h-11 px-4 text-slate-700"
+            class="h-16 rounded-full border-slate-200 px-6 text-lg font-semibold text-slate-700 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.35)]"
             @click="handleOrderClick"
           >
             <ShoppingBag class="h-4 w-4" />
@@ -110,8 +175,10 @@ function handleOrderClick() {
       </div>
     </header>
 
-    <main class="pt-36 sm:pt-32 lg:pt-24">
+    <main :class="hideChrome ? 'min-h-screen' : 'pt-36 sm:pt-32 lg:pt-24'">
       <RouterView />
     </main>
+
+    <AuthDialog />
   </div>
 </template>

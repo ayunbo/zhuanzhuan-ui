@@ -223,6 +223,15 @@ const visibleProducts = computed(() => {
   return products.value.filter((product) => product.categoryPath.level1 === activeCategory.value)
 })
 
+function getDeepestCategoryLabel(product) {
+  return (
+    product?.categoryPath?.level3 ||
+    product?.categoryPath?.level2 ||
+    product?.categoryPath?.level1 ||
+    ''
+  )
+}
+
 function createProduct(pageIndex, itemIndex) {
   const categoryNode = categoryTree[(pageIndex * 3 + itemIndex) % categoryTree.length]
   const level2Node = categoryNode.children[(pageIndex + itemIndex) % categoryNode.children.length]
@@ -244,7 +253,6 @@ function createProduct(pageIndex, itemIndex) {
     },
     sellerName,
     sellerAvatar: sellerName.slice(0, 1),
-    coverLabel: categoryNode.name,
     coverTone: tone,
     campusTag: campusTags[(pageIndex + itemIndex) % campusTags.length],
   }
@@ -445,12 +453,9 @@ onBeforeUnmount(() => {
               />
 
               <div class="relative flex h-full flex-col justify-between">
-                <div class="flex items-start justify-between gap-2">
+                <div class="flex items-start justify-end">
                   <span class="rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
-                    {{ product.coverLabel }}
-                  </span>
-                  <span class="rounded-full bg-slate-950/75 px-2.5 py-1 text-[11px] font-medium text-white">
-                    {{ product.categoryPath.level2 }}
+                    {{ getDeepestCategoryLabel(product) }}
                   </span>
                 </div>
 
@@ -466,23 +471,18 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="space-y-3 p-3">
-              <div class="flex items-start justify-between gap-2">
-                <div class="min-w-0">
-                  <h3 class="line-clamp-2 text-sm font-semibold leading-5 text-slate-900">
-                    {{ product.title }}
-                  </h3>
-                  <p class="mt-1.5 text-lg font-black text-brand-600">￥{{ product.price }}</p>
-                </div>
-                <span class="rounded-full bg-brand-50 px-2 py-1 text-[10px] font-semibold text-brand-700">
-                  同校
-                </span>
+              <div class="min-w-0">
+                <h3 class="line-clamp-2 text-sm font-semibold leading-5 text-slate-900">
+                  {{ product.title }}
+                </h3>
+                <p class="mt-1.5 text-lg font-black text-brand-600">￥{{ product.price }}</p>
               </div>
 
               <div class="flex items-center gap-2.5">
                 <Avatar size="sm" :fallback="product.sellerAvatar" />
                 <div class="min-w-0">
                   <p class="truncate text-xs font-semibold text-slate-800">{{ product.sellerName }}</p>
-                  <p class="truncate text-[11px] text-slate-500">{{ product.categoryPath.level3 }}</p>
+                  <p class="truncate text-[11px] text-slate-500">{{ getDeepestCategoryLabel(product) }}</p>
                 </div>
               </div>
             </div>

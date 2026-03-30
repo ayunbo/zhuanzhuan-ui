@@ -1,27 +1,123 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, MessageCircle, Plus } from 'lucide-vue-next'
+import {
+  ArrowRight,
+  Bike,
+  BookOpen,
+  ChevronRight,
+  MessageCircle,
+  MonitorSmartphone,
+  Package,
+  Plus,
+  ShieldCheck,
+  Shirt,
+  Sparkles,
+} from 'lucide-vue-next'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { ensureLoggedIn } from '@/utils/request'
+import {
+  AUTH_CHANGED_EVENT,
+  ensureLoggedIn,
+  getAuthUser,
+  isLoggedIn as checkLoggedIn,
+  openLoginDialog,
+} from '@/utils/request'
 
 const router = useRouter()
 
 const categoryTree = [
   {
+    id: 'digital',
+    name: '手机数码',
+    accent: 'text-sky-700 bg-sky-50',
+    subtitle: '耳机 / 平板 / 配件 / 电脑设备',
+    children: [
+      {
+        id: 'phone',
+        name: '手机通讯',
+        children: [
+          { id: 'iphone', name: 'iPhone' },
+          { id: 'android', name: '安卓手机' },
+          { id: 'cases', name: '手机壳膜' },
+          { id: 'charger', name: '充电器' },
+        ],
+      },
+      {
+        id: 'audio',
+        name: '音频设备',
+        children: [
+          { id: 'headphone', name: '耳机' },
+          { id: 'speaker', name: '音箱' },
+          { id: 'microphone', name: '麦克风' },
+          { id: 'dac', name: '解码器' },
+        ],
+      },
+      {
+        id: 'computer',
+        name: '电脑外设',
+        children: [
+          { id: 'keyboard', name: '键盘' },
+          { id: 'mouse', name: '鼠标' },
+          { id: 'display', name: '显示器' },
+          { id: 'tablet', name: '平板' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'fashion',
+    name: '服饰鞋包',
+    accent: 'text-rose-700 bg-rose-50',
+    subtitle: '穿搭 / 鞋履 / 包袋 / 配饰',
+    children: [
+      {
+        id: 'tops',
+        name: '上装外套',
+        children: [
+          { id: 'hoodie', name: '卫衣' },
+          { id: 'shirt', name: '衬衫' },
+          { id: 'coat', name: '外套' },
+          { id: 'knitwear', name: '针织衫' },
+        ],
+      },
+      {
+        id: 'shoes',
+        name: '鞋履箱包',
+        children: [
+          { id: 'sneaker', name: '运动鞋' },
+          { id: 'leather', name: '皮鞋' },
+          { id: 'backpack', name: '双肩包' },
+          { id: 'tote', name: '托特包' },
+        ],
+      },
+      {
+        id: 'accessory',
+        name: '饰品配件',
+        children: [
+          { id: 'watch', name: '手表' },
+          { id: 'hat', name: '帽子' },
+          { id: 'belt', name: '腰带' },
+          { id: 'jewelry', name: '饰品' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'books',
-    name: '二手书籍',
+    name: '图书教材',
     accent: 'text-amber-700 bg-amber-50',
-    subtitle: '教材 / 考研 / 课外读物',
+    subtitle: '教材 / 考研 / 课外读物 / 讲义',
     children: [
       {
         id: 'textbooks',
         name: '教材教辅',
         children: [
           { id: 'math', name: '高数线代' },
-          { id: 'english', name: '英语考试' },
+          { id: 'english', name: '大学英语' },
+          { id: 'physics', name: '大学物理' },
+          { id: 'programming', name: '编程教材' },
         ],
       },
       {
@@ -29,55 +125,19 @@ const categoryTree = [
         name: '考研考公',
         children: [
           { id: 'politics', name: '政治' },
+          { id: 'vocabulary', name: '词汇' },
           { id: 'specialized', name: '专业课' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'digital',
-    name: '数码3C',
-    accent: 'text-sky-700 bg-sky-50',
-    subtitle: '耳机 / 平板 / 配件',
-    children: [
-      {
-        id: 'audio',
-        name: '音频设备',
-        children: [
-          { id: 'headphone', name: '耳机' },
-          { id: 'speaker', name: '音箱' },
+          { id: 'interview', name: '面试题' },
         ],
       },
       {
-        id: 'computer',
-        name: '电脑配件',
+        id: 'reading',
+        name: '课外阅读',
         children: [
-          { id: 'keyboard', name: '键盘' },
-          { id: 'display', name: '显示器' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'dorm',
-    name: '宿舍好物',
-    accent: 'text-emerald-700 bg-emerald-50',
-    subtitle: '收纳 / 台灯 / 小家电',
-    children: [
-      {
-        id: 'storage',
-        name: '收纳整理',
-        children: [
-          { id: 'box', name: '收纳箱' },
-          { id: 'rack', name: '置物架' },
-        ],
-      },
-      {
-        id: 'appliance',
-        name: '宿舍电器',
-        children: [
-          { id: 'lamp', name: '台灯' },
-          { id: 'cooker', name: '小家电' },
+          { id: 'novel', name: '小说' },
+          { id: 'history', name: '历史' },
+          { id: 'business', name: '经管' },
+          { id: 'art', name: '艺术设计' },
         ],
       },
     ],
@@ -86,14 +146,16 @@ const categoryTree = [
     id: 'transport',
     name: '交通代步',
     accent: 'text-violet-700 bg-violet-50',
-    subtitle: '自行车 / 滑板 / 头盔',
+    subtitle: '自行车 / 滑板 / 头盔 / 配件',
     children: [
       {
         id: 'bike',
         name: '自行车',
         children: [
           { id: 'commute-bike', name: '通勤车' },
-          { id: 'gear', name: '骑行装备' },
+          { id: 'mountain-bike', name: '山地车' },
+          { id: 'repair', name: '维修工具' },
+          { id: 'lock', name: '车锁' },
         ],
       },
       {
@@ -101,78 +163,98 @@ const categoryTree = [
         name: '滑板轮滑',
         children: [
           { id: 'longboard', name: '长板' },
+          { id: 'skateboard', name: '双翘板' },
+          { id: 'roller', name: '轮滑' },
           { id: 'protection', name: '护具' },
         ],
       },
-    ],
-  },
-  {
-    id: 'beauty',
-    name: '美妆服饰',
-    accent: 'text-rose-700 bg-rose-50',
-    subtitle: '穿搭 / 护肤 / 香氛',
-    children: [
       {
-        id: 'clothes',
-        name: '穿搭服饰',
+        id: 'electric',
+        name: '电动出行',
         children: [
-          { id: 'outerwear', name: '外套' },
-          { id: 'bags', name: '包袋' },
-        ],
-      },
-      {
-        id: 'beauty-detail',
-        name: '护肤彩妆',
-        children: [
-          { id: 'perfume', name: '香氛' },
-          { id: 'skincare', name: '护肤' },
+          { id: 'battery', name: '电瓶' },
+          { id: 'raincoat', name: '雨披' },
+          { id: 'basket', name: '车筐' },
+          { id: 'helmet', name: '头盔' },
         ],
       },
     ],
   },
   {
-    id: 'creative',
-    name: '文创周边',
-    accent: 'text-orange-700 bg-orange-50',
-    subtitle: '手帐 / 摆件 / 盲盒',
+    id: 'dorm',
+    name: '宿舍好物',
+    accent: 'text-emerald-700 bg-emerald-50',
+    subtitle: '收纳 / 台灯 / 小家电 / 寝具',
     children: [
       {
-        id: 'stationery',
-        name: '手帐文具',
+        id: 'storage',
+        name: '收纳整理',
         children: [
-          { id: 'tape', name: '胶带' },
-          { id: 'notebook', name: '笔记本' },
+          { id: 'box', name: '收纳箱' },
+          { id: 'rack', name: '置物架' },
+          { id: 'hanger', name: '衣架' },
+          { id: 'desk-organizer', name: '桌面收纳' },
         ],
       },
       {
-        id: 'collectibles',
-        name: '周边摆件',
+        id: 'appliance',
+        name: '宿舍电器',
         children: [
-          { id: 'badge', name: '徽章' },
-          { id: 'figure', name: '摆件' },
+          { id: 'lamp', name: '台灯' },
+          { id: 'fan', name: '小风扇' },
+          { id: 'cooker', name: '小锅' },
+          { id: 'humidifier', name: '加湿器' },
+        ],
+      },
+      {
+        id: 'bedding',
+        name: '寝居用品',
+        children: [
+          { id: 'mattress', name: '床垫' },
+          { id: 'pillow', name: '枕头' },
+          { id: 'blanket', name: '毛毯' },
+          { id: 'curtain', name: '床帘' },
         ],
       },
     ],
   },
 ]
 
-const FEATURED_CATEGORY_LIMIT = 6
-const PREVIEW_LEVEL2_LIMIT = 2
-const PREVIEW_LEVEL3_LIMIT = 2
-
-const level1Tabs = ['全部', ...categoryTree.map((item) => item.name)]
+const quickActions = [
+  {
+    id: 'verify',
+    label: '快速认证',
+    desc: '完成身份认证',
+    icon: ShieldCheck,
+    accent: 'bg-emerald-50 text-emerald-700',
+  },
+  {
+    id: 'publish',
+    label: '发布闲置',
+    desc: '一键发布商品',
+    icon: Sparkles,
+    accent: 'bg-orange-50 text-orange-700',
+  },
+  {
+    id: 'message',
+    label: '消息中心',
+    desc: '查看最新动态',
+    icon: MessageCircle,
+    accent: 'bg-sky-50 text-sky-700',
+  },
+]
 
 const titleSeeds = {
-  二手书籍: [
+  图书教材: [
     '线性代数笔记超全版',
     '考研英语词汇红宝书',
     '离散数学教材带习题解',
     'C++ 程序设计基础',
   ],
-  数码3C: ['95新降噪耳机', '平板保护壳套装', '机械键盘青轴', '二手显示器支架'],
+  手机数码: ['95新降噪耳机', '平板保护壳套装', '机械键盘青轴', '二手显示器支架'],
   宿舍好物: ['宿舍收纳推车', '可调光护眼台灯', '小型煮面锅', '床边折叠置物架'],
   交通代步: ['校园代步自行车', '长板练习款', '九成新骑行头盔', '电动车雨披'],
-  美妆服饰: ['奶白色针织开衫', '闲置香水小样合集', '校园通勤帆布包', '防晒帽'],
+  服饰鞋包: ['奶白色针织开衫', '闲置香水小样合集', '校园通勤帆布包', '防晒帽'],
   文创周边: ['手帐胶带福袋', '演唱会应援周边', '校园限定徽章', '桌面解压摆件'],
 }
 
@@ -187,32 +269,25 @@ const coverTones = [
   'from-yellow-200 via-amber-100 to-white',
 ]
 
+const level1Tabs = ['全部', ...categoryTree.map((item) => item.name)]
+
 const activeCategory = ref('全部')
+const activeMegaMenuId = ref('')
 const products = ref(createInitialProducts())
 const page = ref(1)
 const maxPage = 4
 const isLoadingMore = ref(false)
 const hasMore = ref(true)
 const loadAnchor = ref(null)
+const isLoggedIn = ref(checkLoggedIn())
+const currentUser = ref(getDisplayUser())
 
 let observer
 let loadTimer
 
-const featuredCategories = computed(() =>
-  categoryTree.slice(0, FEATURED_CATEGORY_LIMIT).map((item) => {
-    const level2Preview = item.children.slice(0, PREVIEW_LEVEL2_LIMIT).map((child) => child.name)
-    const level3Preview = item.children
-      .slice(0, PREVIEW_LEVEL2_LIMIT)
-      .flatMap((child) => child.children.slice(0, PREVIEW_LEVEL3_LIMIT).map((node) => node.name))
-      .slice(0, PREVIEW_LEVEL3_LIMIT)
-
-    return {
-      ...item,
-      level2Preview,
-      level3Preview,
-      hiddenLevel2Count: Math.max(item.children.length - PREVIEW_LEVEL2_LIMIT, 0),
-    }
-  }),
+const featuredCategories = computed(() => categoryTree.slice(0, 6))
+const activeMegaCategory = computed(
+  () => categoryTree.find((item) => item.id === activeMegaMenuId.value) || null,
 )
 
 const visibleProducts = computed(() => {
@@ -222,6 +297,40 @@ const visibleProducts = computed(() => {
 
   return products.value.filter((product) => product.categoryPath.level1 === activeCategory.value)
 })
+
+function getDisplayUser() {
+  const authUser = getAuthUser()
+  return {
+    name: authUser?.name || '同学',
+    studentNo: authUser?.studentNo || '登录后查看订单与收藏',
+    avatar: authUser?.name?.slice(0, 1)?.toLowerCase() || 'c',
+  }
+}
+
+function syncAuthState() {
+  isLoggedIn.value = checkLoggedIn()
+  currentUser.value = getDisplayUser()
+}
+
+function getCategoryIcon(id) {
+  const iconMap = {
+    digital: MonitorSmartphone,
+    fashion: Shirt,
+    books: BookOpen,
+    transport: Bike,
+    dorm: Package,
+  }
+
+  return iconMap[id] || Sparkles
+}
+
+function openMegaMenu(categoryId) {
+  activeMegaMenuId.value = categoryId
+}
+
+function closeMegaMenu() {
+  activeMegaMenuId.value = ''
+}
 
 function getDeepestCategoryLabel(product) {
   return (
@@ -236,7 +345,7 @@ function createProduct(pageIndex, itemIndex) {
   const categoryNode = categoryTree[(pageIndex * 3 + itemIndex) % categoryTree.length]
   const level2Node = categoryNode.children[(pageIndex + itemIndex) % categoryNode.children.length]
   const level3Node = level2Node.children[itemIndex % level2Node.children.length]
-  const titles = titleSeeds[categoryNode.name]
+  const titles = titleSeeds[categoryNode.name] || titleSeeds.图书教材
   const sellerName = sellerSeeds[(pageIndex + itemIndex) % sellerSeeds.length]
   const tone = coverTones[(pageIndex + itemIndex) % coverTones.length]
   const title = titles[itemIndex % titles.length]
@@ -271,7 +380,7 @@ function selectCategory(category) {
 }
 
 function handleQuickAction(label) {
-  if (label === '发闲置') {
+  if (label === '发闲置' || label === '发布闲置') {
     if (!ensureLoggedIn({ source: 'home-publish' })) {
       return
     }
@@ -279,8 +388,31 @@ function handleQuickAction(label) {
     return
   }
 
+  if (label === '快速认证') {
+    if (!ensureLoggedIn({ source: 'home-verify' })) {
+      return
+    }
+    window.alert('认证入口暂未开放')
+    return
+  }
+
+  if (label === '消息' || label === '消息中心') {
+    if (!ensureLoggedIn({ source: 'home-message' })) {
+      return
+    }
+  }
+
   console.log(`快捷操作点击: ${label}`)
   window.alert(`${label} 功能暂未开放`)
+}
+
+function handleUserShortcut() {
+  if (isLoggedIn.value) {
+    window.alert('个人中心暂未开放')
+    return
+  }
+
+  openLoginDialog({ source: 'hero-user-card' })
 }
 
 function loadMoreProducts() {
@@ -328,10 +460,12 @@ function setupObserver() {
 
 onMounted(() => {
   setupObserver()
+  window.addEventListener(AUTH_CHANGED_EVENT, syncAuthState)
 })
 
 onBeforeUnmount(() => {
   observer?.disconnect()
+  window.removeEventListener(AUTH_CHANGED_EVENT, syncAuthState)
   if (loadTimer) {
     window.clearTimeout(loadTimer)
   }
@@ -341,72 +475,192 @@ onBeforeUnmount(() => {
 <template>
   <section class="relative px-4 pb-20 pt-6 sm:px-6 sm:pt-8 lg:px-8">
     <div class="mx-auto flex max-w-[1480px] flex-col gap-6">
-      <Card class="relative overflow-hidden px-6 py-5 sm:px-8 sm:py-6">
+      <Card class="relative overflow-hidden px-4 py-4 sm:px-5 xl:px-6 xl:py-5">
         <div
-          class="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.12),transparent_26%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_24%)]"
-        />
-
-        <div class="relative grid gap-5 xl:grid-cols-12 xl:items-stretch">
-          <div
-            class="rounded-[28px] border border-slate-200/70 bg-slate-950 px-6 py-6 text-white shadow-[0_24px_54px_-36px_rgba(15,23,42,0.92)] xl:col-span-4"
-          >
+          class="grid gap-4 overflow-hidden xl:h-[360px] xl:grid-cols-[248px_minmax(0,1fr)_280px]"
+        >
+          <div class="relative h-full min-h-0" @mouseleave="closeMegaMenu">
             <div
-              class="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold tracking-[0.24em] text-brand-200"
+              class="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white/92 p-3 shadow-[0_20px_48px_-34px_rgba(15,23,42,0.26)]"
             >
-              WELCOME
+              <div class="rounded-[22px] bg-slate-50 px-4 py-3">
+                <p class="text-xs font-semibold uppercase tracking-[0.28em] text-brand-500">Campus Mall</p>
+                <h3 class="mt-2 text-lg font-black text-slate-950">校园分类导航</h3>
+              </div>
+
+              <div class="mt-3 flex-1 space-y-1 overflow-y-auto pr-1">
+                <button
+                  v-for="item in featuredCategories"
+                  :key="item.id"
+                  type="button"
+                  class="flex w-full items-center gap-3 rounded-[18px] px-3 py-3 text-left transition"
+                  :class="
+                    activeMegaMenuId === item.id
+                      ? 'bg-slate-100 text-slate-950'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+                  "
+                  @mouseenter="openMegaMenu(item.id)"
+                >
+                  <div
+                    class="flex h-9 w-9 items-center justify-center rounded-2xl"
+                    :class="item.accent"
+                  >
+                    <component :is="getCategoryIcon(item.id)" class="h-4 w-4" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold">{{ item.name }}</p>
+                    <p class="mt-0.5 truncate text-xs text-slate-400">{{ item.subtitle }}</p>
+                  </div>
+                  <ChevronRight class="h-4 w-4 shrink-0 text-slate-400" />
+                </button>
+              </div>
             </div>
-            <h3 class="mt-4 text-2xl font-black leading-tight sm:text-[30px]">
-              欢迎来到校园二手平台，发现身边的宝藏。
-            </h3>
-            <p class="mt-3 text-sm leading-7 text-slate-300">
-              从教材到耳机，从宿舍收纳到校园通勤，优先和同校同学安心交易，让闲置流转更快一点。
-            </p>
-            <div class="mt-4 flex flex-wrap gap-2 text-xs font-medium text-slate-300">
-              <span class="rounded-full border border-white/10 bg-white/5 px-3 py-2">实时热度 1,286</span>
-              <span class="rounded-full border border-white/10 bg-white/5 px-3 py-2">同校发布 324</span>
-              <span class="rounded-full border border-white/10 bg-white/5 px-3 py-2">担保面交 98%</span>
+
+            <div
+              v-if="activeMegaCategory"
+              class="absolute left-[calc(100%-10px)] top-0 z-50 hidden h-full w-[560px] overflow-hidden rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_34px_90px_-42px_rgba(15,23,42,0.32)] xl:block"
+              @mouseenter="openMegaMenu(activeMegaCategory.id)"
+            >
+              <div class="flex h-full min-h-0 flex-col">
+              <div class="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                <div>
+                  <span
+                    class="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
+                    :class="activeMegaCategory.accent"
+                  >
+                    {{ activeMegaCategory.name }}
+                  </span>
+                  <h4 class="mt-3 text-2xl font-black text-slate-950">{{ activeMegaCategory.subtitle }}</h4>
+                </div>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-200"
+                  @click="selectCategory(activeMegaCategory.name)"
+                >
+                  查看全部
+                  <ArrowRight class="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div class="mt-5 flex-1 space-y-4 overflow-y-auto pr-1">
+                <div
+                  v-for="group in activeMegaCategory.children"
+                  :key="group.id"
+                  class="grid grid-cols-[112px_minmax(0,1fr)] gap-4 border-b border-dashed border-slate-100 pb-4 last:border-b-0 last:pb-0"
+                >
+                  <div>
+                    <p class="text-sm font-bold text-slate-900">{{ group.name }}</p>
+                    <p class="mt-1 text-xs text-slate-400">校园热门小类</p>
+                  </div>
+                  <div class="flex flex-wrap gap-2.5">
+                    <button
+                      v-for="leaf in group.children"
+                      :key="leaf.id"
+                      type="button"
+                      class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-600 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700"
+                    >
+                      {{ leaf.name }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              </div>
             </div>
           </div>
 
-          <div class="flex min-w-0 flex-col xl:col-span-8">
-            <div class="mb-4 flex items-center justify-between">
-              <div class="min-w-0">
-                <p class="text-sm font-semibold uppercase tracking-[0.28em] text-brand-500">热门分类</p>
-                <h2 class="mt-2 text-2xl font-black text-slate-950 sm:text-[38px]">
-                  附近同学都在这里捡漏
-                </h2>
+          <div class="flex h-full min-h-0 flex-col">
+            <div
+              class="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[30px] border border-slate-200/70 bg-[linear-gradient(135deg,#fff7ed_0%,#ffffff_44%,#eff6ff_100%)] px-6 py-6 shadow-[0_24px_64px_-40px_rgba(15,23,42,0.28)] xl:px-7 xl:py-6"
+            >
+              <div class="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-orange-200/50 blur-3xl" />
+              <div class="absolute -bottom-16 right-12 h-36 w-36 rounded-full bg-sky-200/40 blur-3xl" />
+
+              <div class="relative flex h-full min-h-0 flex-col justify-between gap-5">
+                <div>
+                  <div class="inline-flex rounded-full bg-white/90 px-3 py-1 text-xs font-semibold tracking-[0.24em] text-brand-500 shadow-sm">
+                    CAMPUS REUSE
+                  </div>
+                  <h2 class="mt-4 max-w-[13ch] text-[30px] font-black leading-[1.12] text-slate-950">
+                    欢迎来到校园二手平台，发现身边的宝藏
+                  </h2>
+                  <p class="mt-3 max-w-[38ch] text-sm leading-6 text-slate-600">
+                    同校闲置更安心，教材、耳机、宿舍好物和通勤装备都能在这里快速流转。
+                  </p>
+                </div>
+
+                <div class="space-y-3">
+                  <div class="flex flex-wrap gap-2">
+                    <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
+                      平台担保面交
+                    </span>
+                    <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
+                      同校发布优先
+                    </span>
+                    <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
+                      热门闲置实时更新
+                    </span>
+                  </div>
+
+                  <div class="flex items-center gap-3">
+                    <Button class="rounded-full px-6" @click="handleQuickAction('发闲置')">发布闲置</Button>
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-brand-600"
+                      @click="selectCategory('全部')"
+                    >
+                      去逛商品流
+                      <ArrowRight class="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
               </div>
+            </div>
+          </div>
+
+          <div class="flex h-full min-h-0 flex-col gap-3">
+            <div
+              class="flex flex-col rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_20px_48px_-34px_rgba(15,23,42,0.22)]"
+            >
               <button
                 type="button"
-                class="hidden shrink-0 items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-brand-600 sm:inline-flex"
-                @click="handleQuickAction('查看全部分类')"
+                class="flex w-full items-center gap-3 rounded-[20px] p-1 text-left transition hover:bg-slate-50"
+                @click="handleUserShortcut"
               >
-                查看全部
-                <ArrowRight class="h-4 w-4" />
+                <Avatar size="md" :fallback="currentUser.avatar" />
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-slate-500">
+                    {{ isLoggedIn ? 'Hi,' : 'Hi,' }}
+                    <span class="ml-1 text-slate-950">{{ currentUser.name }}</span>
+                  </p>
+                  <p class="mt-1 truncate text-xs text-slate-400">{{ currentUser.studentNo }}</p>
+                </div>
               </button>
+
+              <div class="mt-3 rounded-[20px] bg-slate-50 px-4 py-3">
+                <p class="text-sm font-semibold text-slate-900">
+                  {{ isLoggedIn ? '欢迎回来，继续看看附近好物。' : '登录后可查看订单、收藏与消息。' }}
+                </p>
+                <p class="mt-2 text-xs leading-5 text-slate-500">
+                  {{ isLoggedIn ? '校园交易动态会第一时间同步到你的消息中心。' : '一键登录即可使用发布、认证和消息功能。' }}
+                </p>
+              </div>
             </div>
 
-            <div class="grid flex-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div class="grid h-full flex-1 grid-cols-1 gap-3">
               <button
-                v-for="item in featuredCategories"
+                v-for="item in quickActions"
                 :key="item.id"
                 type="button"
-                class="group min-w-0 rounded-[24px] border border-slate-200/80 bg-white/82 px-5 py-4 text-left transition duration-300 hover:-translate-y-1 hover:border-brand-200 hover:bg-white hover:shadow-lg"
-                @click="selectCategory(item.name)"
+                class="flex min-h-0 items-center gap-3 rounded-[24px] border border-slate-200 bg-white px-4 py-3 text-left shadow-[0_16px_40px_-34px_rgba(15,23,42,0.22)] transition hover:-translate-y-0.5 hover:border-brand-200"
+                @click="handleQuickAction(item.label)"
               >
-                <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold" :class="item.accent">
-                  {{ item.name }}
-                </span>
-                <p class="mt-3 line-clamp-1 text-base font-bold text-slate-900 transition group-hover:text-brand-600">
-                  {{ item.subtitle }}
-                </p>
-                <p class="mt-1 line-clamp-1 text-sm text-slate-500">
-                  {{ item.level2Preview.join(' / ') }}
-                  <span v-if="item.hiddenLevel2Count"> +{{ item.hiddenLevel2Count }}</span>
-                </p>
-                <p class="mt-1 line-clamp-1 text-xs text-slate-400">
-                  {{ item.level3Preview.join(' / ') }}
-                </p>
+                <div class="flex h-10 w-10 items-center justify-center rounded-2xl" :class="item.accent">
+                  <component :is="item.icon" class="h-[18px] w-[18px]" />
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm font-bold text-slate-900">{{ item.label }}</p>
+                  <p class="mt-1 truncate text-xs text-slate-400">{{ item.desc }}</p>
+                </div>
               </button>
             </div>
           </div>

@@ -103,10 +103,10 @@ onBeforeUnmount(() => {
           <div
             class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-500 text-lg font-bold text-white shadow-[0_16px_34px_-18px_rgba(249,115,22,0.95)]"
           >
-            校
+            赚赚
           </div>
           <div>
-            <p class="text-lg font-black tracking-[0.18em] text-slate-950">校园二手平台</p>
+            <p class="text-lg font-black tracking-[0.18em] text-slate-950">校园二手物品交易平台</p>
             <p class="text-xs text-slate-500">Campus Reuse Marketplace</p>
           </div>
         </div>

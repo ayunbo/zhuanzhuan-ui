@@ -1,11 +1,14 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+// Category API: GET /user/category/tree -> data:[{ id, parentId, name, level, sort, status, children }]
+// Goods API: GET /user/goods (or /user/goods/page) -> data:{ total, records:[{ id, sellerId, categoryId, categoryName, title, price, oldPrice, quality, location, status, statusDesc, cover, viewCount, favoriteCount, sellerName, sellerAvatar, publishTime }] }
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowRight,
   Bike,
   BookOpen,
   ChevronRight,
+  LoaderCircle,
   MessageCircle,
   MonitorSmartphone,
   Package,
@@ -17,7 +20,7 @@ import {
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import {
+import request, {
   AUTH_CHANGED_EVENT,
   ensureLoggedIn,
   getAuthUser,
@@ -27,237 +30,18 @@ import {
 
 const router = useRouter()
 
-const categoryTree = [
-  {
-    id: 'digital',
-    name: '手机数码',
-    accent: 'text-sky-700 bg-sky-50',
-    subtitle: '耳机 / 平板 / 配件 / 电脑设备',
-    children: [
-      {
-        id: 'phone',
-        name: '手机通讯',
-        children: [
-          { id: 'iphone', name: 'iPhone' },
-          { id: 'android', name: '安卓手机' },
-          { id: 'cases', name: '手机壳膜' },
-          { id: 'charger', name: '充电器' },
-        ],
-      },
-      {
-        id: 'audio',
-        name: '音频设备',
-        children: [
-          { id: 'headphone', name: '耳机' },
-          { id: 'speaker', name: '音箱' },
-          { id: 'microphone', name: '麦克风' },
-          { id: 'dac', name: '解码器' },
-        ],
-      },
-      {
-        id: 'computer',
-        name: '电脑外设',
-        children: [
-          { id: 'keyboard', name: '键盘' },
-          { id: 'mouse', name: '鼠标' },
-          { id: 'display', name: '显示器' },
-          { id: 'tablet', name: '平板' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'fashion',
-    name: '服饰鞋包',
-    accent: 'text-rose-700 bg-rose-50',
-    subtitle: '穿搭 / 鞋履 / 包袋 / 配饰',
-    children: [
-      {
-        id: 'tops',
-        name: '上装外套',
-        children: [
-          { id: 'hoodie', name: '卫衣' },
-          { id: 'shirt', name: '衬衫' },
-          { id: 'coat', name: '外套' },
-          { id: 'knitwear', name: '针织衫' },
-        ],
-      },
-      {
-        id: 'shoes',
-        name: '鞋履箱包',
-        children: [
-          { id: 'sneaker', name: '运动鞋' },
-          { id: 'leather', name: '皮鞋' },
-          { id: 'backpack', name: '双肩包' },
-          { id: 'tote', name: '托特包' },
-        ],
-      },
-      {
-        id: 'accessory',
-        name: '饰品配件',
-        children: [
-          { id: 'watch', name: '手表' },
-          { id: 'hat', name: '帽子' },
-          { id: 'belt', name: '腰带' },
-          { id: 'jewelry', name: '饰品' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'books',
-    name: '图书教材',
-    accent: 'text-amber-700 bg-amber-50',
-    subtitle: '教材 / 考研 / 课外读物 / 讲义',
-    children: [
-      {
-        id: 'textbooks',
-        name: '教材教辅',
-        children: [
-          { id: 'math', name: '高数线代' },
-          { id: 'english', name: '大学英语' },
-          { id: 'physics', name: '大学物理' },
-          { id: 'programming', name: '编程教材' },
-        ],
-      },
-      {
-        id: 'exam',
-        name: '考研考公',
-        children: [
-          { id: 'politics', name: '政治' },
-          { id: 'vocabulary', name: '词汇' },
-          { id: 'specialized', name: '专业课' },
-          { id: 'interview', name: '面试题' },
-        ],
-      },
-      {
-        id: 'reading',
-        name: '课外阅读',
-        children: [
-          { id: 'novel', name: '小说' },
-          { id: 'history', name: '历史' },
-          { id: 'business', name: '经管' },
-          { id: 'art', name: '艺术设计' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'transport',
-    name: '交通代步',
-    accent: 'text-violet-700 bg-violet-50',
-    subtitle: '自行车 / 滑板 / 头盔 / 配件',
-    children: [
-      {
-        id: 'bike',
-        name: '自行车',
-        children: [
-          { id: 'commute-bike', name: '通勤车' },
-          { id: 'mountain-bike', name: '山地车' },
-          { id: 'repair', name: '维修工具' },
-          { id: 'lock', name: '车锁' },
-        ],
-      },
-      {
-        id: 'board',
-        name: '滑板轮滑',
-        children: [
-          { id: 'longboard', name: '长板' },
-          { id: 'skateboard', name: '双翘板' },
-          { id: 'roller', name: '轮滑' },
-          { id: 'protection', name: '护具' },
-        ],
-      },
-      {
-        id: 'electric',
-        name: '电动出行',
-        children: [
-          { id: 'battery', name: '电瓶' },
-          { id: 'raincoat', name: '雨披' },
-          { id: 'basket', name: '车筐' },
-          { id: 'helmet', name: '头盔' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'dorm',
-    name: '宿舍好物',
-    accent: 'text-emerald-700 bg-emerald-50',
-    subtitle: '收纳 / 台灯 / 小家电 / 寝具',
-    children: [
-      {
-        id: 'storage',
-        name: '收纳整理',
-        children: [
-          { id: 'box', name: '收纳箱' },
-          { id: 'rack', name: '置物架' },
-          { id: 'hanger', name: '衣架' },
-          { id: 'desk-organizer', name: '桌面收纳' },
-        ],
-      },
-      {
-        id: 'appliance',
-        name: '宿舍电器',
-        children: [
-          { id: 'lamp', name: '台灯' },
-          { id: 'fan', name: '小风扇' },
-          { id: 'cooker', name: '小锅' },
-          { id: 'humidifier', name: '加湿器' },
-        ],
-      },
-      {
-        id: 'bedding',
-        name: '寝居用品',
-        children: [
-          { id: 'mattress', name: '床垫' },
-          { id: 'pillow', name: '枕头' },
-          { id: 'blanket', name: '毛毯' },
-          { id: 'curtain', name: '床帘' },
-        ],
-      },
-    ],
-  },
-]
+const PAGE_SIZE = 18
 
-const heroVerifyAction = {
-  label: '快速认证',
-  desc: '完成身份认证，获得更多交易权限',
-  icon: ShieldCheck,
-  accent: 'bg-emerald-50 text-emerald-700',
-}
-
-const titleSeeds = {
-  图书教材: [
-    '线性代数笔记超全版',
-    '考研英语词汇红宝书',
-    '离散数学教材带习题解',
-    'C++ 程序设计基础',
-  ],
-  手机数码: ['95新降噪耳机', '平板保护壳套装', '机械键盘青轴', '二手显示器支架'],
-  宿舍好物: ['宿舍收纳推车', '可调光护眼台灯', '小型煮面锅', '床边折叠置物架'],
-  交通代步: ['校园代步自行车', '长板练习款', '九成新骑行头盔', '电动车雨披'],
-  服饰鞋包: ['奶白色针织开衫', '闲置香水小样合集', '校园通勤帆布包', '防晒帽'],
-}
-
-const sellerSeeds = ['林夏', '周予安', '许知远', '姜柠', '温枝', '沈听澜', '顾言', '宋时微']
-const campusTags = ['宿舍楼下', '图书馆旁', '食堂门口', '东门快取', '南区自提', '学院路口']
-const coverTones = [
-  'from-amber-200 via-orange-100 to-white',
-  'from-sky-200 via-cyan-100 to-white',
-  'from-emerald-200 via-teal-100 to-white',
-  'from-rose-200 via-pink-100 to-white',
-  'from-violet-200 via-fuchsia-100 to-white',
-  'from-yellow-200 via-amber-100 to-white',
-]
-
-const level1Tabs = ['全部', ...categoryTree.map((item) => item.name)]
-
-const activeCategory = ref('全部')
-const activeMegaMenuId = ref('')
-const products = ref(createInitialProducts())
+const categories = ref([])
+const activeMegaMenuId = ref(null)
+const activeCategoryMode = ref('all')
+const activeRootCategoryId = ref(null)
+const activeExactCategoryId = ref(null)
+const products = ref([])
 const page = ref(1)
-const maxPage = 4
+const total = ref(0)
+const isLoadingCategories = ref(false)
+const isLoadingProducts = ref(false)
 const isLoadingMore = ref(false)
 const hasMore = ref(true)
 const loadAnchor = ref(null)
@@ -265,20 +49,76 @@ const isLoggedIn = ref(checkLoggedIn())
 const currentUser = ref(getDisplayUser())
 
 let observer
-let loadTimer
 
-const featuredCategories = computed(() => categoryTree.slice(0, 6))
+const categoryMap = computed(() => {
+  const map = new Map()
+
+  function walk(nodes, parent = null, root = null, path = []) {
+    nodes.forEach((node) => {
+      const currentRoot = root || node
+      const currentPath = [...path, node.name]
+      const normalized = {
+        ...node,
+        parent,
+        rootId: currentRoot.id,
+        pathNames: currentPath,
+        children: Array.isArray(node.children) ? node.children : [],
+      }
+
+      map.set(node.id, normalized)
+      walk(normalized.children, normalized, currentRoot, currentPath)
+    })
+  }
+
+  walk(categories.value)
+  return map
+})
+
+const rootCategories = computed(() => categories.value)
+const featuredCategories = computed(() => rootCategories.value)
+const level1Tabs = computed(() => [
+  { key: 'all', label: '全部', mode: 'all', id: null },
+  ...rootCategories.value.map((item) => ({
+    key: `root-${item.id}`,
+    label: item.name,
+    mode: 'root',
+    id: item.id,
+  })),
+])
+
 const activeMegaCategory = computed(
-  () => categoryTree.find((item) => item.id === activeMegaMenuId.value) || null,
+  () => categoryMap.value.get(activeMegaMenuId.value) || null,
 )
 
+const activeCategoryTitle = computed(() => {
+  if (activeCategoryMode.value === 'exact' && activeExactCategoryId.value) {
+    return categoryMap.value.get(activeExactCategoryId.value)?.name || '全部'
+  }
+
+  if (activeCategoryMode.value === 'root' && activeRootCategoryId.value) {
+    return categoryMap.value.get(activeRootCategoryId.value)?.name || '全部'
+  }
+
+  return '全部'
+})
+
 const visibleProducts = computed(() => {
-  if (activeCategory.value === '全部') {
+  if (activeCategoryMode.value !== 'root' || !activeRootCategoryId.value) {
     return products.value
   }
 
-  return products.value.filter((product) => product.categoryPath.level1 === activeCategory.value)
+  return products.value.filter((product) => {
+    const category = categoryMap.value.get(product.categoryId)
+    return category?.rootId === activeRootCategoryId.value
+  })
 })
+
+const heroVerifyAction = {
+  label: '快速认证',
+  desc: '完成身份认证，获得更多交易权限',
+  icon: ShieldCheck,
+  accent: 'bg-emerald-50 text-emerald-700',
+}
 
 function getDisplayUser() {
   const authUser = getAuthUser()
@@ -306,59 +146,71 @@ function getCategoryIcon(id) {
   return iconMap[id] || Sparkles
 }
 
+function normalizeCategoryNode(node) {
+  return {
+    id: node.id,
+    parentId: node.parentId,
+    name: node.name,
+    level: node.level,
+    sort: node.sort,
+    status: node.status,
+    children: Array.isArray(node.children) ? node.children.map(normalizeCategoryNode) : [],
+  }
+}
+
+function normalizeProduct(record) {
+  return {
+    id: record.id,
+    sellerId: record.sellerId,
+    categoryId: record.categoryId,
+    categoryName: record.categoryName || '未分类',
+    title: record.title || '未命名商品',
+    price: record.price,
+    oldPrice: record.oldPrice,
+    quality: record.quality,
+    location: record.location || '校内面交',
+    status: record.status,
+    statusDesc: record.statusDesc,
+    cover: record.cover || '',
+    viewCount: record.viewCount || 0,
+    favoriteCount: record.favoriteCount || 0,
+    sellerName: record.sellerName || `卖家${record.sellerId ?? ''}`,
+    sellerAvatar: record.sellerAvatar || '',
+    publishTime: record.publishTime || '',
+  }
+}
+
+function getProductCategoryLabel(product) {
+  if (product.categoryId && categoryMap.value.has(product.categoryId)) {
+    return categoryMap.value.get(product.categoryId).name
+  }
+
+  return product.categoryName || '未分类'
+}
+
+function getProductRootId(product) {
+  if (!product.categoryId) {
+    return null
+  }
+
+  return categoryMap.value.get(product.categoryId)?.rootId || null
+}
+
 function openMegaMenu(categoryId) {
   activeMegaMenuId.value = categoryId
 }
 
 function closeMegaMenu() {
-  activeMegaMenuId.value = ''
+  activeMegaMenuId.value = null
 }
 
-function getDeepestCategoryLabel(product) {
-  return (
-    product?.categoryPath?.level3 ||
-    product?.categoryPath?.level2 ||
-    product?.categoryPath?.level1 ||
-    ''
-  )
-}
-
-function createProduct(pageIndex, itemIndex) {
-  const categoryNode = categoryTree[(pageIndex * 3 + itemIndex) % categoryTree.length]
-  const level2Node = categoryNode.children[(pageIndex + itemIndex) % categoryNode.children.length]
-  const level3Node = level2Node.children[itemIndex % level2Node.children.length]
-  const titles = titleSeeds[categoryNode.name] || titleSeeds['图书教材']
-  const sellerName = sellerSeeds[(pageIndex + itemIndex) % sellerSeeds.length]
-  const tone = coverTones[(pageIndex + itemIndex) % coverTones.length]
-  const title = titles[itemIndex % titles.length]
-  const price = 18 + ((pageIndex * 7 + itemIndex) % 15) * 12 + (itemIndex % 3) * 0.9
-
-  return {
-    id: `${pageIndex}-${itemIndex}`,
-    title,
-    price: price.toFixed(price % 1 === 0 ? 0 : 1),
-    categoryPath: {
-      level1: categoryNode.name,
-      level2: level2Node.name,
-      level3: level3Node.name,
-    },
-    sellerName,
-    sellerAvatar: sellerName.slice(0, 1),
-    coverTone: tone,
-    campusTag: campusTags[(pageIndex + itemIndex) % campusTags.length],
+function handleUserShortcut() {
+  if (isLoggedIn.value) {
+    window.alert('个人中心暂未开放')
+    return
   }
-}
 
-function createInitialProducts() {
-  return Array.from({ length: 12 }, (_, index) => createProduct(0, index))
-}
-
-function createNextPage(pageIndex) {
-  return Array.from({ length: 8 }, (_, index) => createProduct(pageIndex, index))
-}
-
-function selectCategory(category) {
-  activeCategory.value = category
+  openLoginDialog({ source: 'hero-user-card' })
 }
 
 function handleQuickAction(label) {
@@ -388,36 +240,131 @@ function handleQuickAction(label) {
   window.alert(`${label} 功能暂未开放`)
 }
 
-function handleUserShortcut() {
-  if (isLoggedIn.value) {
-    window.alert('个人中心暂未开放')
+function formatPrice(value) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) {
+    return '0.00'
+  }
+
+  return amount % 1 === 0 ? String(amount) : amount.toFixed(2)
+}
+
+function setAllCategory() {
+  activeCategoryMode.value = 'all'
+  activeRootCategoryId.value = null
+  activeExactCategoryId.value = null
+}
+
+function setRootCategory(rootId) {
+  activeCategoryMode.value = 'root'
+  activeRootCategoryId.value = rootId
+  activeExactCategoryId.value = null
+}
+
+function setExactCategory(categoryId) {
+  activeCategoryMode.value = 'exact'
+  activeExactCategoryId.value = categoryId
+  activeRootCategoryId.value = categoryMap.value.get(categoryId)?.rootId || null
+}
+
+function handleTabClick(tab) {
+  if (tab.mode === 'all') {
+    setAllCategory()
     return
   }
 
-  openLoginDialog({ source: 'hero-user-card' })
+  setRootCategory(tab.id)
+}
+
+function handleLeafCategoryClick(categoryId) {
+  setExactCategory(categoryId)
+  closeMegaMenu()
+}
+
+function handleRootCategoryClick(categoryId) {
+  setRootCategory(categoryId)
+  closeMegaMenu()
+}
+
+function buildGoodsParams(targetPage) {
+  const params = {
+    page: targetPage,
+    pageSize: PAGE_SIZE,
+  }
+
+  if (activeCategoryMode.value === 'exact' && activeExactCategoryId.value) {
+    params.categoryId = activeExactCategoryId.value
+  }
+
+  return params
+}
+
+async function fetchCategories() {
+  isLoadingCategories.value = true
+  try {
+    const response = await request.get('/user/category/tree')
+    const payload = response.data
+
+    if (payload?.code !== 1) {
+      throw new Error(payload?.msg || '分类加载失败')
+    }
+
+    categories.value = Array.isArray(payload.data) ? payload.data.map(normalizeCategoryNode) : []
+  } finally {
+    isLoadingCategories.value = false
+  }
+}
+
+async function fetchProducts({ reset = false } = {}) {
+  const targetPage = reset ? 1 : page.value
+
+  if (reset) {
+    isLoadingProducts.value = true
+    hasMore.value = true
+  } else {
+    if (isLoadingMore.value || !hasMore.value) {
+      return
+    }
+    isLoadingMore.value = true
+  }
+
+  try {
+    const response = await request.get('/user/goods', {
+      params: buildGoodsParams(targetPage),
+    })
+    const payload = response.data
+
+    if (payload?.code !== 1) {
+      throw new Error(payload?.msg || '商品加载失败')
+    }
+
+    const pageData = payload.data || {}
+    const records = Array.isArray(pageData.records) ? pageData.records.map(normalizeProduct) : []
+    const nextTotal = Number(pageData.total || 0)
+
+    total.value = nextTotal
+    page.value = targetPage
+
+    if (reset) {
+      products.value = records
+    } else {
+      products.value.push(...records)
+    }
+
+    hasMore.value = products.value.length < nextTotal && records.length > 0
+  } finally {
+    isLoadingProducts.value = false
+    isLoadingMore.value = false
+  }
 }
 
 function loadMoreProducts() {
-  if (isLoadingMore.value || !hasMore.value) {
+  if (isLoadingProducts.value || isLoadingMore.value || !hasMore.value) {
     return
   }
 
-  isLoadingMore.value = true
-  loadTimer = window.setTimeout(() => {
-    if (page.value >= maxPage) {
-      hasMore.value = false
-      isLoadingMore.value = false
-      return
-    }
-
-    products.value.push(...createNextPage(page.value))
-    page.value += 1
-    isLoadingMore.value = false
-
-    if (page.value >= maxPage) {
-      hasMore.value = false
-    }
-  }, 900)
+  page.value += 1
+  fetchProducts()
 }
 
 function setupObserver() {
@@ -425,6 +372,7 @@ function setupObserver() {
     return
   }
 
+  observer?.disconnect()
   observer = new IntersectionObserver(
     (entries) => {
       const [entry] = entries
@@ -440,17 +388,23 @@ function setupObserver() {
   observer.observe(loadAnchor.value)
 }
 
-onMounted(() => {
-  setupObserver()
+watch(
+  () => [activeCategoryMode.value, activeRootCategoryId.value, activeExactCategoryId.value],
+  () => {
+    fetchProducts({ reset: true })
+  },
+)
+
+onMounted(async () => {
   window.addEventListener(AUTH_CHANGED_EVENT, syncAuthState)
+  await fetchCategories()
+  await fetchProducts({ reset: true })
+  setupObserver()
 })
 
 onBeforeUnmount(() => {
   observer?.disconnect()
   window.removeEventListener(AUTH_CHANGED_EVENT, syncAuthState)
-  if (loadTimer) {
-    window.clearTimeout(loadTimer)
-  }
 })
 </script>
 
@@ -470,7 +424,15 @@ onBeforeUnmount(() => {
                 <h3 class="mt-2 text-lg font-black text-slate-950">校园分类导航</h3>
               </div>
 
-              <div class="mt-3 flex-1 space-y-1 overflow-y-auto pr-1">
+              <div v-if="isLoadingCategories" class="mt-3 flex-1 space-y-2">
+                <div
+                  v-for="index in 6"
+                  :key="index"
+                  class="h-14 rounded-[18px] bg-slate-100/80"
+                />
+              </div>
+
+              <div v-else class="mt-3 flex-1 space-y-1 overflow-y-auto pr-1">
                 <button
                   v-for="item in featuredCategories"
                   :key="item.id"
@@ -519,7 +481,7 @@ onBeforeUnmount(() => {
                   <button
                     type="button"
                     class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-200"
-                    @click="selectCategory(activeMegaCategory.name)"
+                    @click="handleRootCategoryClick(activeMegaCategory.id)"
                   >
                     查看全部
                     <ArrowRight class="h-3.5 w-3.5" />
@@ -538,10 +500,11 @@ onBeforeUnmount(() => {
                     </div>
                     <div class="flex flex-wrap gap-2.5">
                       <button
-                        v-for="leaf in group.children"
+                        v-for="leaf in group.children.length ? group.children : [group]"
                         :key="leaf.id"
                         type="button"
                         class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-600 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700"
+                        @click="handleLeafCategoryClick(leaf.id)"
                       >
                         {{ leaf.name }}
                       </button>
@@ -554,37 +517,91 @@ onBeforeUnmount(() => {
 
           <div class="flex h-full min-h-0 flex-col">
             <div
-              class="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[30px] border border-slate-200/70 bg-[linear-gradient(135deg,#fff7ed_0%,#ffffff_44%,#eff6ff_100%)] px-7 py-7 shadow-[0_24px_64px_-40px_rgba(15,23,42,0.28)]"
+              class="relative flex h-full min-h-0 overflow-hidden rounded-[30px] border border-slate-200/70 bg-[linear-gradient(135deg,#fff7ed_0%,#ffffff_46%,#eff6ff_100%)] px-7 py-7 shadow-[0_24px_64px_-40px_rgba(15,23,42,0.28)]"
             >
-              <div class="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-orange-200/50 blur-3xl" />
-              <div class="absolute -bottom-16 right-12 h-36 w-36 rounded-full bg-sky-200/40 blur-3xl" />
+              <div class="absolute -right-12 top-8 h-44 w-44 rounded-full bg-orange-100/60 blur-3xl" />
+              <div class="absolute bottom-0 right-14 h-40 w-40 rounded-full bg-sky-100/70 blur-3xl" />
+              <div class="absolute right-24 top-6 h-24 w-24 rounded-full border border-white/70 bg-white/40 blur-2xl" />
 
-              <div class="relative flex h-full min-h-0 flex-col justify-between">
-                <div class="space-y-8">
-                  <div class="inline-flex rounded-full bg-white/90 px-3 py-1 text-xs font-semibold tracking-[0.24em] text-brand-500 shadow-sm">
-                    CAMPUS REUSE
+              <div class="relative grid h-full w-full grid-cols-[minmax(0,1.15fr)_minmax(220px,0.85fr)] gap-6">
+                <div class="flex h-full flex-col justify-between">
+                  <div class="max-w-md space-y-8">
+                    <div class="inline-flex rounded-full bg-white/90 px-3 py-1 text-xs font-semibold tracking-[0.24em] text-brand-500 shadow-sm">
+                      CAMPUS REUSE
+                    </div>
+
+                    <div class="space-y-6">
+                      <h2 class="text-[30px] font-black leading-tight text-slate-950">
+                        欢迎来到二手物品交易平台，发现身边的宝藏
+                      </h2>
+                      <p class="text-sm leading-7 text-slate-600">
+                        真实分类与商品数据已接入，浏览同校正在出售的闲置好物，快速找到你需要的那一件。
+                      </p>
+                    </div>
                   </div>
 
-                  <div class="space-y-6">
-                    <h2 class="max-w-[13ch] text-[30px] font-black leading-tight text-slate-950">
-                      欢迎来到校园二手平台，发现身边的宝藏
-                    </h2>
-                    <p class="max-w-[40ch] text-sm leading-7 text-slate-600">
-                      同校闲置交易更安心，教材、耳机、宿舍好物和通勤装备都能在这里快速流转。
-                    </p>
+                  <div class="flex max-w-md flex-wrap gap-2.5">
+                    <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
+                      {{ activeCategoryTitle }}
+                    </span>
+                    <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
+                      当前已加载 {{ visibleProducts.length }} 件
+                    </span>
+                    <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
+                      全站在售 {{ total }} 件
+                    </span>
                   </div>
                 </div>
 
-                <div class="flex flex-wrap gap-2.5 pt-6">
-                  <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
-                    平台担保面交
-                  </span>
-                  <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
-                    同校发布优先
-                  </span>
-                  <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
-                    热门闲置实时更新
-                  </span>
+                <div class="relative flex h-full items-center justify-center">
+                  <div class="relative h-full w-full">
+                    <div
+                      class="absolute right-1 top-6 w-[178px] rounded-[26px] border border-white/80 bg-white/90 p-4 shadow-[0_28px_60px_-34px_rgba(249,115,22,0.45)] transition duration-500 hover:-translate-y-1 hover:rotate-0"
+                      style="transform: rotate(8deg); transform-origin: center;"
+                    >
+                      <div class="rounded-[22px] bg-[linear-gradient(135deg,#fde68a_0%,#fef3c7_42%,#ffffff_100%)] p-4">
+                        <div class="h-24 rounded-[18px] bg-white/60" />
+                      </div>
+                      <div class="mt-4 space-y-2">
+                        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-orange-500">
+                          分类树
+                        </p>
+                        <p class="line-clamp-2 text-sm font-black text-slate-900">
+                          一级二级三级分类实时渲染，导航与商品筛选同步联动
+                        </p>
+                      </div>
+                    </div>
+
+                    <div
+                      class="absolute bottom-7 left-2 w-[190px] rounded-[26px] border border-white/80 bg-white/95 p-4 shadow-[0_28px_60px_-34px_rgba(15,23,42,0.28)] transition duration-500 hover:-translate-y-1 hover:rotate-0"
+                      style="transform: rotate(-7deg); transform-origin: center;"
+                    >
+                      <div class="rounded-[22px] bg-[linear-gradient(135deg,#dbeafe_0%,#eff6ff_50%,#ffffff_100%)] p-4">
+                        <div class="flex items-center justify-between">
+                          <span class="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-sky-600">
+                            商品流
+                          </span>
+                          <Sparkles class="h-4 w-4 text-sky-500" />
+                        </div>
+                        <div class="mt-4 h-20 rounded-[18px] bg-white/65" />
+                      </div>
+                      <div class="mt-4 flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                          <p class="truncate text-sm font-black text-slate-900">无限滚动分页</p>
+                          <p class="mt-1 text-xs text-slate-500">触底继续加载真实数据</p>
+                        </div>
+                        <div class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                          在线
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="absolute right-10 top-1/2 h-14 w-14 -translate-y-1/2 rounded-full bg-white/75 shadow-lg backdrop-blur transition duration-500 hover:-translate-y-[55%]">
+                      <div class="flex h-full w-full items-center justify-center">
+                        <Package class="h-6 w-6 text-brand-500" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -646,47 +663,95 @@ onBeforeUnmount(() => {
 
           <div class="flex gap-2 overflow-x-auto pb-1">
             <Button
-              v-for="category in level1Tabs"
-              :key="category"
+              v-for="tab in level1Tabs"
+              :key="tab.key"
               size="sm"
-              :variant="activeCategory === category ? 'default' : 'ghost'"
+              :variant="
+                (tab.mode === 'all' && activeCategoryMode === 'all') ||
+                (tab.mode === 'root' && activeCategoryMode === 'root' && activeRootCategoryId === tab.id)
+                  ? 'default'
+                  : 'ghost'
+              "
               class="shrink-0"
               :class="
-                activeCategory === category
+                (tab.mode === 'all' && activeCategoryMode === 'all') ||
+                (tab.mode === 'root' && activeCategoryMode === 'root' && activeRootCategoryId === tab.id)
                   ? 'shadow-[0_14px_34px_-18px_rgba(249,115,22,0.9)]'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               "
-              @click="selectCategory(category)"
+              @click="handleTabClick(tab)"
             >
-              {{ category }}
+              {{ tab.label }}
             </Button>
           </div>
         </div>
 
-        <div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div
+          v-if="isLoadingProducts && !products.length"
+          class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+        >
+          <div
+            v-for="index in PAGE_SIZE"
+            :key="index"
+            class="overflow-hidden rounded-[20px] border border-slate-200 bg-white"
+          >
+            <div class="aspect-square bg-slate-100" />
+            <div class="space-y-3 p-3">
+              <div class="h-3 rounded bg-slate-100" />
+              <div class="h-4 rounded bg-slate-100" />
+              <div class="h-4 w-1/2 rounded bg-slate-100" />
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-else
+          class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+        >
           <article
             v-for="product in visibleProducts"
             :key="product.id"
             class="group overflow-hidden rounded-[20px] border border-slate-200 bg-white transition duration-300 hover:-translate-y-1 hover:border-brand-200 hover:shadow-[0_24px_50px_-30px_rgba(15,23,42,0.35)]"
           >
-            <div class="aspect-square overflow-hidden bg-gradient-to-br" :class="product.coverTone" />
+            <div
+              class="aspect-square overflow-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-white"
+            >
+              <img
+                v-if="product.cover"
+                :src="product.cover"
+                :alt="product.title"
+                class="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+              />
+            </div>
 
             <div class="space-y-3 p-3">
               <div class="min-w-0 space-y-2">
                 <div class="flex items-center justify-between gap-2">
                   <p class="truncate text-[11px] font-medium text-slate-500">
-                    {{ getDeepestCategoryLabel(product) }}
+                    {{ getProductCategoryLabel(product) }}
                   </p>
-                  <p class="truncate text-[11px] text-slate-400">{{ product.campusTag }}</p>
+                  <p class="truncate text-[11px] text-slate-400">{{ product.location }}</p>
                 </div>
                 <h3 class="truncate text-sm font-semibold text-slate-900">
                   {{ product.title }}
                 </h3>
-                <p class="text-lg font-semibold text-brand-600">￥{{ product.price }}</p>
+                <div class="flex items-center gap-2">
+                  <p class="text-lg font-semibold text-brand-600">￥{{ formatPrice(product.price) }}</p>
+                  <p
+                    v-if="product.oldPrice"
+                    class="text-xs text-slate-400 line-through"
+                  >
+                    ￥{{ formatPrice(product.oldPrice) }}
+                  </p>
+                </div>
               </div>
 
               <div class="flex items-center gap-2.5">
-                <Avatar size="sm" :fallback="product.sellerAvatar" />
+                <Avatar
+                  size="sm"
+                  :src="product.sellerAvatar"
+                  :fallback="product.sellerName?.slice(0, 1) || '卖'"
+                />
                 <div class="min-w-0 flex items-center">
                   <p class="truncate text-xs font-semibold text-slate-800">{{ product.sellerName }}</p>
                 </div>
@@ -695,9 +760,19 @@ onBeforeUnmount(() => {
           </article>
         </div>
 
+        <div
+          v-if="!isLoadingProducts && !visibleProducts.length"
+          class="flex min-h-48 items-center justify-center text-sm text-slate-400"
+        >
+          当前分类下暂无商品
+        </div>
+
         <div ref="loadAnchor" class="flex min-h-20 items-center justify-center pt-6">
-          <p v-if="isLoadingMore" class="text-sm font-medium text-slate-500">加载中...</p>
-          <p v-else-if="!hasMore" class="text-sm font-medium text-slate-400">已经到底了</p>
+          <p v-if="isLoadingMore" class="inline-flex items-center gap-2 text-sm font-medium text-slate-500">
+            <LoaderCircle class="h-4 w-4 animate-spin" />
+            加载中...
+          </p>
+          <p v-else-if="!hasMore" class="text-sm font-medium text-slate-400">没有更多了</p>
           <p v-else class="text-sm text-slate-400">继续下滑，发现更多闲置</p>
         </div>
       </Card>

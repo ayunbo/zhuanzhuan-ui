@@ -1,18 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
-import {
-  ChevronDown,
-  Search,
-  ShoppingBag,
-} from 'lucide-vue-next'
-import {
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuPortal,
-  DropdownMenuRoot,
-  DropdownMenuTrigger,
-} from 'radix-vue'
+import { ChevronDown, Search, ShoppingBag } from 'lucide-vue-next'
 import AuthDialog from '@/components/AuthDialog.vue'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -31,21 +20,27 @@ const searchKeyword = ref('')
 const hideChrome = computed(() => route.meta.hideChrome === true)
 const isLoggedIn = ref(checkLoggedIn())
 const currentUser = ref(getDisplayUser())
+const isUserMenuOpen = ref(false)
 
 const menuItems = ['我买到的', '我卖出的', '我的收藏', '退出登录']
+
+let userMenuCloseTimer = null
 
 function getDisplayUser() {
   const authUser = getAuthUser()
   return {
     name: authUser?.name || '未登录',
     campus: authUser?.studentNo || '点击登录',
-    avatar: authUser?.name?.slice(0, 1)?.toLowerCase() || 'a',
+    avatar: authUser?.name?.slice(0, 1)?.toUpperCase() || '校',
   }
 }
 
 function syncAuthState() {
   isLoggedIn.value = checkLoggedIn()
   currentUser.value = getDisplayUser()
+  if (!isLoggedIn.value) {
+    closeUserMenu()
+  }
 }
 
 function handleSearch() {
@@ -58,7 +53,46 @@ function openAuthDialog() {
   openLoginDialog({ source: 'navbar-avatar-click' })
 }
 
+function openUserMenu() {
+  if (!isLoggedIn.value) {
+    return
+  }
+
+  if (userMenuCloseTimer) {
+    window.clearTimeout(userMenuCloseTimer)
+    userMenuCloseTimer = null
+  }
+
+  isUserMenuOpen.value = true
+}
+
+function closeUserMenu() {
+  if (userMenuCloseTimer) {
+    window.clearTimeout(userMenuCloseTimer)
+    userMenuCloseTimer = null
+  }
+
+  isUserMenuOpen.value = false
+}
+
+function scheduleCloseUserMenu() {
+  if (!isLoggedIn.value) {
+    return
+  }
+
+  if (userMenuCloseTimer) {
+    window.clearTimeout(userMenuCloseTimer)
+  }
+
+  userMenuCloseTimer = window.setTimeout(() => {
+    isUserMenuOpen.value = false
+    userMenuCloseTimer = null
+  }, 120)
+}
+
 function handleMenuClick(item) {
+  closeUserMenu()
+
   if (item === '退出登录') {
     clearAuthSession()
     return
@@ -87,6 +121,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener(AUTH_CHANGED_EVENT, syncAuthState)
+  if (userMenuCloseTimer) {
+    window.clearTimeout(userMenuCloseTimer)
+    userMenuCloseTimer = null
+  }
 })
 </script>
 
@@ -103,7 +141,7 @@ onBeforeUnmount(() => {
           <div
             class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-500 text-lg font-bold text-white shadow-[0_16px_34px_-18px_rgba(249,115,22,0.95)]"
           >
-            赚赚
+            转转
           </div>
           <div>
             <p class="text-lg font-black tracking-[0.18em] text-slate-950">校园二手物品交易平台</p>
@@ -128,40 +166,60 @@ onBeforeUnmount(() => {
         </form>
 
         <div class="flex items-center justify-between gap-3 lg:justify-end">
-          <DropdownMenuRoot v-if="isLoggedIn">
-            <DropdownMenuTrigger as-child>
-              <button
-                type="button"
-                class="hidden items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.35)] transition hover:border-brand-200 hover:shadow-md sm:flex"
-              >
-                <Avatar size="md" :fallback="currentUser.avatar" />
-                <div class="text-left">
-                  <p class="text-[15px] font-semibold leading-none text-slate-900">
-                    {{ currentUser.name }}
-                  </p>
-                  <p class="mt-1 text-xs text-slate-500">{{ currentUser.campus }}</p>
-                </div>
-                <ChevronDown class="h-4 w-4 text-slate-400 transition" />
-              </button>
-            </DropdownMenuTrigger>
+          <div
+            v-if="isLoggedIn"
+            class="relative hidden sm:block"
+            @mouseenter="openUserMenu"
+            @mouseleave="scheduleCloseUserMenu"
+          >
+            <button
+              type="button"
+              class="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.35)] transition hover:border-brand-200 hover:shadow-md"
+              :class="isUserMenuOpen ? 'border-brand-200 shadow-md' : ''"
+            >
+              <Avatar size="md" :fallback="currentUser.avatar" />
+              <div class="text-left">
+                <p class="text-[15px] font-semibold leading-none text-slate-900">
+                  {{ currentUser.name }}
+                </p>
+                <p class="mt-1 text-xs text-slate-500">{{ currentUser.campus }}</p>
+              </div>
+              <ChevronDown
+                class="h-4 w-4 text-slate-400 transition"
+                :class="isUserMenuOpen ? 'rotate-180' : ''"
+              />
+            </button>
 
-            <DropdownMenuPortal to="body">
-              <DropdownMenuContent
-                align="end"
-                :side-offset="12"
-                class="z-[70] w-48 rounded-3xl border border-slate-200 bg-white/96 p-2 text-left shadow-[0_24px_70px_-26px_rgba(15,23,42,0.28)] outline-none"
+            <transition
+              enter-active-class="transition duration-150 ease-out"
+              enter-from-class="translate-y-1 opacity-0"
+              enter-to-class="translate-y-0 opacity-100"
+              leave-active-class="transition duration-100 ease-in"
+              leave-from-class="translate-y-0 opacity-100"
+              leave-to-class="translate-y-1 opacity-0"
+            >
+              <div
+                v-show="isUserMenuOpen"
+                class="absolute right-0 top-full z-[70] w-48 pt-3"
+                @mouseenter="openUserMenu"
+                @mouseleave="scheduleCloseUserMenu"
               >
-                <DropdownMenuItem
-                  v-for="item in menuItems"
-                  :key="item"
-                  class="flex w-full cursor-pointer items-center rounded-2xl px-4 py-3 text-sm font-medium text-slate-600 outline-none transition hover:bg-brand-50 hover:text-brand-700 data-[highlighted]:bg-brand-50 data-[highlighted]:text-brand-700"
-                  @select.prevent="handleMenuClick(item)"
+                <div
+                  class="rounded-3xl border border-slate-200 bg-white/96 p-2 text-left shadow-[0_24px_70px_-26px_rgba(15,23,42,0.28)] backdrop-blur"
                 >
-                  {{ item }}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenuPortal>
-          </DropdownMenuRoot>
+                  <button
+                    v-for="item in menuItems"
+                    :key="item"
+                    type="button"
+                    class="flex w-full cursor-pointer items-center rounded-2xl px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-brand-50 hover:text-brand-700"
+                    @click="handleMenuClick(item)"
+                  >
+                    {{ item }}
+                  </button>
+                </div>
+              </div>
+            </transition>
+          </div>
 
           <button
             v-else

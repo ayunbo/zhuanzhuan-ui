@@ -135,16 +135,16 @@ onBeforeUnmount(() => {
       class="fixed inset-x-0 top-0 z-50 border-b border-white/70 bg-white/88 backdrop-blur-xl"
     >
       <div
-        class="mx-auto flex max-w-[1480px] flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:gap-6 lg:px-8"
+        class="mx-auto flex max-w-[1480px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:gap-5 lg:px-8"
       >
         <div class="flex items-center gap-3">
           <div
-            class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-500 text-lg font-bold text-white shadow-[0_16px_34px_-18px_rgba(249,115,22,0.95)]"
+            class="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-500 text-base font-bold text-white shadow-[0_16px_34px_-18px_rgba(249,115,22,0.95)]"
           >
             转转
           </div>
           <div>
-            <p class="text-lg font-black tracking-[0.18em] text-slate-950">校园二手物品交易平台</p>
+            <p class="text-base font-black tracking-[0.16em] text-slate-950">校园二手物品交易平台</p>
             <p class="text-xs text-slate-500">Campus Reuse Marketplace</p>
           </div>
         </div>
@@ -157,9 +157,9 @@ onBeforeUnmount(() => {
             v-model="searchKeyword"
             type="search"
             placeholder="搜教材、耳机、宿舍好物"
-            class="h-12 flex-1 border-white bg-slate-50/90 shadow-[0_10px_28px_-22px_rgba(15,23,42,0.55)]"
+            class="h-11 flex-1 border-white bg-slate-50/90 shadow-[0_10px_28px_-22px_rgba(15,23,42,0.55)]"
           />
-          <Button type="submit" size="lg" class="h-12 shrink-0 px-5">
+          <Button type="submit" size="lg" class="h-11 shrink-0 px-5">
             <Search class="h-4 w-4" />
             搜索
           </Button>
@@ -174,7 +174,7 @@ onBeforeUnmount(() => {
           >
             <button
               type="button"
-              class="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.35)] transition hover:border-brand-200 hover:shadow-md"
+              class="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-1.5 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.35)] transition hover:border-brand-200 hover:shadow-md"
               :class="isUserMenuOpen ? 'border-brand-200 shadow-md' : ''"
             >
               <Avatar size="md" :fallback="currentUser.avatar" />
@@ -224,7 +224,7 @@ onBeforeUnmount(() => {
           <button
             v-else
             type="button"
-            class="hidden items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.35)] transition hover:bg-slate-50 hover:border-brand-200 hover:shadow-md sm:flex"
+            class="hidden items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-1.5 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.35)] transition hover:bg-slate-50 hover:border-brand-200 hover:shadow-md sm:flex"
             @click="openAuthDialog"
           >
             <Avatar size="md" :fallback="currentUser.avatar" />
@@ -240,7 +240,7 @@ onBeforeUnmount(() => {
           <Button
             variant="outline"
             size="sm"
-            class="h-16 rounded-full border-slate-200 px-6 text-lg font-semibold text-slate-700 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.35)]"
+            class="h-11 rounded-full border-slate-200 px-5 text-base font-semibold text-slate-700 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.35)]"
             @click="handleOrderClick"
           >
             <ShoppingBag class="h-4 w-4" />

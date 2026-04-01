@@ -186,11 +186,11 @@ watch(
           >
             <button
               type="button"
-              class="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-1.5 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.35)] transition hover:border-brand-200 hover:shadow-md"
-              :class="isUserMenuOpen ? 'border-brand-200 shadow-md' : ''"
+              class="flex h-12 items-center gap-3 rounded-full border border-transparent bg-transparent px-4 transition-colors hover:border-slate-200 hover:bg-slate-50"
+              :class="isUserMenuOpen ? 'border-slate-200 bg-slate-50' : ''"
             >
               <Avatar size="md" :fallback="currentUser.avatar" />
-              <div class="text-left">
+              <div class="flex flex-col justify-center text-left">
                 <p class="text-[15px] font-semibold leading-none text-slate-900">
                   {{ currentUser.name }}
                 </p>
@@ -236,11 +236,11 @@ watch(
           <button
             v-else
             type="button"
-            class="hidden items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-1.5 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.35)] transition hover:bg-slate-50 hover:border-brand-200 hover:shadow-md sm:flex"
+            class="hidden h-12 items-center gap-3 rounded-full border border-transparent bg-transparent px-4 transition-colors hover:border-slate-200 hover:bg-slate-50 sm:flex"
             @click="openAuthDialog"
           >
             <Avatar size="md" :fallback="currentUser.avatar" />
-            <div class="text-left">
+            <div class="flex flex-col justify-center text-left">
               <p class="text-[15px] font-semibold leading-none text-slate-900">
                 {{ currentUser.name }}
               </p>
@@ -250,9 +250,8 @@ watch(
           </button>
 
           <Button
-            variant="outline"
-            size="sm"
-            class="h-11 rounded-full border-slate-200 px-5 text-base font-semibold text-slate-700 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.35)]"
+            variant="ghost"
+            class="h-12 rounded-full border border-transparent px-5 text-base font-semibold text-slate-700 hover:border-slate-200 hover:bg-slate-50"
             @click="handleOrderClick"
           >
             <ShoppingBag class="h-4 w-4" />

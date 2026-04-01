@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { RouterView, useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 import { ChevronDown, Search, ShoppingBag } from 'lucide-vue-next'
 import AuthDialog from '@/components/AuthDialog.vue'
 import { Avatar } from '@/components/ui/avatar'
@@ -16,6 +16,7 @@ import {
 } from '@/utils/request'
 
 const route = useRoute()
+const router = useRouter()
 const searchKeyword = ref('')
 const hideChrome = computed(() => route.meta.hideChrome === true)
 const isLoggedIn = ref(checkLoggedIn())
@@ -46,7 +47,10 @@ function syncAuthState() {
 function handleSearch() {
   const keyword = searchKeyword.value.trim() || '全部商品'
   console.log(`搜索校园二手商品: ${keyword}`)
-  window.alert(`搜索功能演示：${keyword}`)
+  router.push({
+    path: '/search',
+    query: keyword ? { keyword } : {},
+  })
 }
 
 function openAuthDialog() {
@@ -126,6 +130,14 @@ onBeforeUnmount(() => {
     userMenuCloseTimer = null
   }
 })
+
+watch(
+  () => route.query.keyword,
+  (keyword) => {
+    searchKeyword.value = typeof keyword === 'string' ? keyword : ''
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

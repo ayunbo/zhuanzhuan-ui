@@ -1,5 +1,5 @@
-﻿<script setup>
-import { computed, onMounted, watch } from 'vue'
+<script setup>
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   UserFilled,
@@ -11,24 +11,50 @@ import {
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import FloatingMessageCapsule from '@/components/chat/FloatingMessageCapsule.vue'
+import NotifyDebugPanel from '@/components/notify/NotifyDebugPanel.vue'
+import TopNotifyCapsule from '@/components/notify/TopNotifyCapsule.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { useNotifyStore } from '@/stores/notify'
+import { getNoticeActionText, resolveNoticeTargetRoute } from '@/utils/notify/target'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const chatStore = useChatStore()
 const notifyStore = useNotifyStore()
+const notifyDebugPanelEnabled =
+  import.meta.env.DEV || import.meta.env.VITE_NOTIFY_DEBUG_PANEL === 'true'
 
 const isAuthPage = computed(() => ['login', 'register'].includes(route.name))
 const showMessageCapsule = computed(() => route.name === 'home' && !isAuthPage.value)
+const showNotifyDebugPanel = computed(() => notifyDebugPanelEnabled && authStore.isLoggedIn)
 const messageUnreadCount = computed(() =>
   authStore.isLoggedIn ? chatStore.unreadTotal + notifyStore.unreadTotal : 0,
 )
+const notifyCapsuleVisible = ref(false)
+const notifyCapsuleVersion = ref(0)
+const notifyCapsulePayload = ref({
+  title: '系统通知',
+  message: '',
+  tag: '实时通知',
+  time: '',
+  actionText: '',
+  targetPage: '',
+  targetId: null,
+})
+
+function formatNotifyTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
 
 async function bootstrapChatState() {
   if (!authStore.isLoggedIn) {
+    notifyCapsuleVisible.value = false
     chatStore.reset()
     notifyStore.reset()
     return
@@ -36,13 +62,18 @@ async function bootstrapChatState() {
 
   try {
     chatStore.connectSocket()
-    await Promise.allSettled([chatStore.refreshUnreadTotal(), notifyStore.refreshUnreadTotal()])
+    await Promise.allSettled([
+      chatStore.refreshUnreadTotal(),
+      notifyStore.refreshUnreadTotal(),
+      notifyStore.refreshSessionSummary(),
+    ])
   } catch {
     // Ignore unread fetch errors in app shell.
   }
 }
 
 const handleLogout = () => {
+  notifyCapsuleVisible.value = false
   authStore.logout()
   chatStore.reset()
   notifyStore.reset()
@@ -58,6 +89,21 @@ const handleMessageCapsuleClick = () => {
   router.push('/chat')
 }
 
+const handleNotifyCapsuleClose = () => {
+  notifyCapsuleVisible.value = false
+}
+
+const handleNotifyCapsuleAction = () => {
+  const routeTarget = resolveNoticeTargetRoute(notifyCapsulePayload.value)
+  if (!routeTarget) {
+    ElMessage.info('该通知类型的页面跳转暂未接入')
+    return
+  }
+
+  notifyCapsuleVisible.value = false
+  router.push(routeTarget)
+}
+
 onMounted(() => {
   bootstrapChatState()
 })
@@ -66,6 +112,26 @@ watch(
   () => authStore.isLoggedIn,
   () => {
     bootstrapChatState()
+  },
+)
+
+watch(
+  () => notifyStore.lastIncomingNotice?.__stamp,
+  () => {
+    const notice = notifyStore.lastIncomingNotice
+    if (!notice) return
+
+    notifyCapsulePayload.value = {
+      title: notice.title || '系统通知',
+      message: notice.content || '',
+      tag: '实时通知',
+      time: formatNotifyTime(notice.createTime),
+      actionText: getNoticeActionText(notice),
+      targetPage: notice.targetPage || '',
+      targetId: notice.targetId ?? notice.bizId ?? null,
+    }
+    notifyCapsuleVersion.value += 1
+    notifyCapsuleVisible.value = true
   },
 )
 </script>
@@ -147,6 +213,20 @@ watch(
       :unread-count="messageUnreadCount"
       @click="handleMessageCapsuleClick"
     />
+
+    <TopNotifyCapsule
+      :visible="notifyCapsuleVisible"
+      :title="notifyCapsulePayload.title"
+      :message="notifyCapsulePayload.message"
+      :tag="notifyCapsulePayload.tag"
+      :time="notifyCapsulePayload.time"
+      :action-text="notifyCapsulePayload.actionText"
+      :version="notifyCapsuleVersion"
+      @action="handleNotifyCapsuleAction"
+      @close="handleNotifyCapsuleClose"
+    />
+
+    <NotifyDebugPanel v-if="showNotifyDebugPanel" />
   </div>
 </template>
 

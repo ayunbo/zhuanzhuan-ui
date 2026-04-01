@@ -4,4 +4,5 @@ export {
   fetchNoticeUnreadCount,
   markAllNoticesRead,
   markNoticeRead,
+  publishMockNotice,
 } from './service'

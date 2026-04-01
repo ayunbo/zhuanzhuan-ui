@@ -20,7 +20,7 @@ const props = defineProps({
   },
 })
 
-defineEmits(['read-all', 'read-notice'])
+defineEmits(['navigate', 'read-all', 'read-notice'])
 
 const hasUnread = computed(() =>
   props.noticeList.some((item) => Number(item?.readStatus) !== 1),
@@ -89,19 +89,28 @@ function formatDateTime(value) {
 
           <div class="card-foot">
             <span v-if="notice.bizId" class="biz-hint">关联编号 #{{ notice.bizId }}</span>
-            <el-button
-              v-if="Number(notice.readStatus) !== 1"
-              size="small"
-              type="primary"
-              plain
-              :loading="isMarking(notice.id)"
-              @click="$emit('read-notice', notice.id)"
-            >
-              标记已读
-            </el-button>
-            <span v-else class="read-time">
-              {{ notice.readTime ? `已于 ${formatDateTime(notice.readTime)} 读过` : '已读' }}
-            </span>
+            <div class="card-actions">
+              <el-button
+                v-if="notice.targetPage"
+                size="small"
+                @click="$emit('navigate', notice)"
+              >
+                查看
+              </el-button>
+              <el-button
+                v-if="Number(notice.readStatus) !== 1"
+                size="small"
+                type="primary"
+                plain
+                :loading="isMarking(notice.id)"
+                @click="$emit('read-notice', notice.id)"
+              >
+                标记已读
+              </el-button>
+              <span v-else class="read-time">
+                {{ notice.readTime ? `已于 ${formatDateTime(notice.readTime)} 读过` : '已读' }}
+              </span>
+            </div>
           </div>
         </article>
       </div>
@@ -228,6 +237,12 @@ function formatDateTime(value) {
   gap: 12px;
 }
 
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .biz-hint,
 .read-time {
   color: #7b879b;
@@ -247,6 +262,10 @@ function formatDateTime(value) {
   .card-foot {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .card-actions {
+    flex-wrap: wrap;
   }
 }
 </style>

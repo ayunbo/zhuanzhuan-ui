@@ -23,10 +23,29 @@ function normalizeSummary(summary, unreadTotal = 0) {
   }
 }
 
+function normalizeNoticeMessage(notice) {
+  return {
+    id: notice?.id ?? null,
+    type: notice?.type ?? null,
+    title: notice?.title || '系统通知',
+    content: notice?.content || '',
+    bizType: notice?.bizType ?? null,
+    bizId: notice?.bizId ?? null,
+    readStatus: normalizeNumber(notice?.readStatus),
+    readTime: notice?.readTime || null,
+    createTime: notice?.createTime || null,
+    actionText: notice?.actionText || '',
+    targetPage: notice?.targetPage || '',
+    targetId: notice?.targetId ?? null,
+  }
+}
+
 export const useNotifyStore = defineStore('notify', {
   state: () => ({
     unreadTotal: 0,
     sessionSummary: normalizeSummary(null, 0),
+    lastIncomingNotice: null,
+    lastUnreadEvent: null,
   }),
   actions: {
     async refreshUnreadTotal() {
@@ -51,6 +70,28 @@ export const useNotifyStore = defineStore('notify', {
         this.unreadTotal,
       )
     },
+    handleUnreadEvent(payload) {
+      this.unreadTotal = normalizeNumber(payload?.totalUnreadCount)
+      this.updateSummaryLocal({ unreadCount: this.unreadTotal })
+      this.lastUnreadEvent = {
+        totalUnreadCount: this.unreadTotal,
+        __stamp: Date.now(),
+      }
+    },
+    handleIncomingNotice(notice) {
+      const normalizedNotice = normalizeNoticeMessage(notice)
+      this.lastIncomingNotice = {
+        ...normalizedNotice,
+        __stamp: Date.now(),
+      }
+
+      this.updateSummaryLocal({
+        lastNoticeId: normalizedNotice.id,
+        lastTitle: normalizedNotice.title || '系统消息',
+        lastMsg: normalizedNotice.content || normalizedNotice.title || '',
+        lastTime: normalizedNotice.createTime || new Date().toISOString(),
+      })
+    },
     decreaseUnreadLocal(delta = 1) {
       const nextUnread = Math.max(0, this.unreadTotal - normalizeNumber(delta))
       this.unreadTotal = nextUnread
@@ -59,6 +100,8 @@ export const useNotifyStore = defineStore('notify', {
     reset() {
       this.unreadTotal = 0
       this.sessionSummary = normalizeSummary(null, 0)
+      this.lastIncomingNotice = null
+      this.lastUnreadEvent = null
     },
   },
 })

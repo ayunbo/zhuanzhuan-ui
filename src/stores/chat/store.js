@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { fetchChatSessionList, fetchChatUnreadCount } from '@/api/chat/service'
+import { useNotifyStore } from '@/stores/notify'
 import { getStoredToken } from '@/utils/auth'
 import { createChatSocket } from '@/utils/chat/socket'
 
@@ -104,6 +105,8 @@ export const useChatStore = defineStore('chat', {
     handleSocketMessage(event) {
       try {
         const payload = JSON.parse(event.data)
+        const notifyStore = useNotifyStore()
+
         if (payload?.event === 'chat.unread') {
           this.handleUnreadEvent(payload.data)
           return
@@ -116,6 +119,16 @@ export const useChatStore = defineStore('chat', {
 
         if (payload?.event === 'chat.read') {
           this.handleReadEvent(payload.data)
+          return
+        }
+
+        if (payload?.event === 'notice.unread') {
+          notifyStore.handleUnreadEvent(payload.data)
+          return
+        }
+
+        if (payload?.event === 'notice.message') {
+          notifyStore.handleIncomingNotice(payload.data)
         }
       } catch {
         // Ignore malformed socket messages.

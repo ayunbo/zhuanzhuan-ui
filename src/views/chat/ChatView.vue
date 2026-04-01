@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Bell, ChatDotRound } from '@element-plus/icons-vue'
 import {
@@ -18,12 +18,14 @@ import NoticeSessionPanel from '@/components/notify/NoticeSessionPanel.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { useNotifyStore } from '@/stores/notify'
+import { resolveNoticeTargetRoute } from '@/utils/notify/target'
 import {
   createNoticeVirtualSession,
   isNoticeSessionKey,
   sortMixedSessionList,
 } from '@/utils/notify/session'
 
+const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const chatStore = useChatStore()
@@ -192,7 +194,7 @@ async function loadNoticeMessages() {
       pageNo: 1,
       pageSize: 100,
     })
-    noticeList.value = [...list].reverse()
+    noticeList.value = [...list]
   } finally {
     loadingNotices.value = false
   }
@@ -214,6 +216,37 @@ async function activateSession(session) {
   chatStore.setCurrentSessionId(sessionId)
   await loadMessages(sessionId)
   await markCurrentSessionRead(sessionId)
+}
+
+async function syncSessionWithRouteQuery() {
+  const querySessionKey = String(route.query.sessionKey || '')
+  const querySessionId = Number(route.query.sessionId)
+
+  if (querySessionKey && isNoticeSessionKey(querySessionKey)) {
+    if (!isNoticeSessionActive.value) {
+      await activateSession(noticeSession.value)
+    }
+    return
+  }
+
+  if (querySessionId) {
+    if (Number(activeSessionId.value) === querySessionId && !isNoticeSessionActive.value) {
+      return
+    }
+
+    let targetSession =
+      chatSessionList.value.find((item) => Number(item.sessionId) === querySessionId) || null
+
+    if (!targetSession) {
+      await chatStore.refreshSessionList()
+      targetSession =
+        chatStore.sessionList.find((item) => Number(item.sessionId) === querySessionId) || null
+    }
+
+    if (targetSession) {
+      await activateSession(targetSession)
+    }
+  }
 }
 
 async function handleSessionClick(session) {
@@ -348,6 +381,31 @@ async function handleReadAllNotices() {
   }
 }
 
+function handleNoticeNavigate(notice) {
+  const routeTarget = resolveNoticeTargetRoute(notice)
+  if (!routeTarget) {
+    ElMessage.info('该通知类型的页面跳转暂未接入')
+    return
+  }
+
+  if (routeTarget.path === '/chat') {
+    const targetSessionId = Number(routeTarget.query?.sessionId)
+    if (targetSessionId) {
+      const matchedSession = chatSessionList.value.find(
+        (item) => Number(item.sessionId) === targetSessionId,
+      )
+
+      if (matchedSession) {
+        activateSession(matchedSession).catch(() => {
+          ElMessage.error('聊天会话打开失败')
+        })
+      }
+    }
+  }
+
+  router.push(routeTarget)
+}
+
 watch(
   () => chatStore.lastIncomingMessage?.__stamp,
   async () => {
@@ -370,6 +428,24 @@ watch(
   () => chatStore.lastReadReceipt?.__stamp,
   () => {
     applyReadReceipt(chatStore.lastReadReceipt)
+  },
+)
+
+watch(
+  () => notifyStore.lastIncomingNotice?.__stamp,
+  () => {
+    const notice = notifyStore.lastIncomingNotice
+    if (!notice || !isNoticeSessionActive.value) return
+    if (noticeList.value.some((item) => Number(item.id) === Number(notice.id))) return
+
+    noticeList.value.unshift(notice)
+  },
+)
+
+watch(
+  () => [route.query.sessionId, route.query.sessionKey],
+  async () => {
+    await syncSessionWithRouteQuery()
   },
 )
 
@@ -460,6 +536,7 @@ onUnmounted(() => {
           :notice-list="noticeList"
           :marking-all="markingAllNotices"
           :marking-ids="markingNoticeIds"
+          @navigate="handleNoticeNavigate"
           @read-all="handleReadAllNotices"
           @read-notice="handleNoticeRead"
         />

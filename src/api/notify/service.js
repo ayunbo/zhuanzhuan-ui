@@ -36,3 +36,11 @@ export function markAllNoticesRead() {
     method: 'POST',
   })
 }
+
+export function publishMockNotice(data) {
+  return request({
+    url: '/user/notice/mock/publish',
+    method: 'POST',
+    data,
+  })
+}

@@ -123,6 +123,7 @@ const heroVerifyAction = {
 function getDisplayUser() {
   const authUser = getAuthUser()
   return {
+    avatarSrc: authUser?.avatar || '',
     name: authUser?.name || '同学',
     studentNo: authUser?.studentNo || '登录后查看订单与收藏',
     avatar: authUser?.name?.slice(0, 1) || '校',
@@ -611,6 +612,7 @@ onBeforeUnmount(() => {
               >
                 <Avatar
                   size="lg"
+                  :src="currentUser.avatarSrc"
                   :fallback="currentUser.avatar"
                   class="h-20 w-20 text-2xl shadow-[0_18px_36px_-22px_rgba(249,115,22,0.75)]"
                 />

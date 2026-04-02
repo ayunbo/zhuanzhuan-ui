@@ -41,6 +41,7 @@ function getDisplayUser() {
     name: authUser?.name || '未登录',
     campus: authUser?.studentNo || '点击登录',
     avatar: authUser?.name?.slice(0, 1)?.toUpperCase() || '校',
+    avatarSrc: authUser?.avatar || '',
   }
 }
 
@@ -207,7 +208,7 @@ watch(
               class="flex h-12 items-center gap-3 rounded-full border border-transparent bg-transparent px-4 transition-colors hover:border-slate-200 hover:bg-slate-50"
               :class="isUserMenuOpen ? 'border-slate-200 bg-slate-50' : ''"
             >
-              <Avatar size="md" :fallback="currentUser.avatar" />
+              <Avatar size="md" :src="currentUser.avatarSrc" :fallback="currentUser.avatar" />
               <div class="flex flex-col justify-center text-left">
                 <p class="text-[15px] font-semibold leading-none text-slate-900">
                   {{ currentUser.name }}
@@ -257,7 +258,7 @@ watch(
             class="hidden h-12 items-center gap-3 rounded-full border border-transparent bg-transparent px-4 transition-colors hover:border-slate-200 hover:bg-slate-50 sm:flex"
             @click="openAuthDialog"
           >
-            <Avatar size="md" :fallback="currentUser.avatar" />
+            <Avatar size="md" :src="currentUser.avatarSrc" :fallback="currentUser.avatar" />
             <div class="flex flex-col justify-center text-left">
               <p class="text-[15px] font-semibold leading-none text-slate-900">
                 {{ currentUser.name }}

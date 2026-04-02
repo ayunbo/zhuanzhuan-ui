@@ -35,6 +35,77 @@ const router = createRouter({
       name: 'search',
       component: () => import('../views/SearchResultView.vue'),
     },
+    {
+      path: '/user',
+      component: () => import('../views/UserCenterLayout.vue'),
+      meta: {
+        showNavbarSearch: false,
+      },
+      children: [
+        {
+          path: '',
+          name: 'user-center',
+          component: () => import('../views/UserCenterHomeView.vue'),
+          meta: {
+            showNavbarSearch: false,
+          },
+        },
+        {
+          path: 'published',
+          name: 'user-published',
+          component: () => import('../views/UserCenterSectionView.vue'),
+          meta: {
+            showNavbarSearch: false,
+            title: '我发布的',
+          },
+        },
+        {
+          path: 'sold',
+          name: 'user-sold',
+          component: () => import('../views/UserCenterSectionView.vue'),
+          meta: {
+            showNavbarSearch: false,
+            title: '我卖出的',
+          },
+        },
+        {
+          path: 'bought',
+          name: 'user-bought',
+          component: () => import('../views/UserCenterSectionView.vue'),
+          meta: {
+            showNavbarSearch: false,
+            title: '我买到的',
+          },
+        },
+        {
+          path: 'favorites',
+          name: 'user-favorites',
+          component: () => import('../views/UserCenterSectionView.vue'),
+          meta: {
+            showNavbarSearch: false,
+            title: '我的收藏',
+          },
+        },
+        {
+          path: 'profile',
+          name: 'user-profile',
+          component: () => import('../views/UserCenterSectionView.vue'),
+          meta: {
+            showNavbarSearch: false,
+            title: '个人资料',
+          },
+        },
+        {
+          path: 'security',
+          name: 'user-security',
+          component: () => import('../views/UserCenterSectionView.vue'),
+          meta: {
+            showNavbarSearch: false,
+            title: '账号与安全',
+          },
+        },
+      ],
+    },
   ],
 })
 

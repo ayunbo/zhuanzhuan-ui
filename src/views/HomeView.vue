@@ -206,7 +206,7 @@ function closeMegaMenu() {
 
 function handleUserShortcut() {
   if (isLoggedIn.value) {
-    window.alert('个人中心暂未开放')
+    router.push('/user')
     return
   }
 
@@ -419,10 +419,6 @@ onBeforeUnmount(() => {
             <div
               class="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white/92 p-3 shadow-[0_20px_48px_-34px_rgba(15,23,42,0.26)]"
             >
-              <div class="rounded-[22px] bg-slate-50 px-4 py-3">
-                <p class="text-xs font-semibold uppercase tracking-[0.28em] text-brand-500">Campus Mall</p>
-                <h3 class="mt-2 text-lg font-black text-slate-950">校园分类导航</h3>
-              </div>
 
               <div v-if="isLoadingCategories" class="mt-3 flex-1 space-y-2">
                 <div
@@ -526,13 +522,10 @@ onBeforeUnmount(() => {
               <div class="relative grid h-full w-full grid-cols-[minmax(0,1.15fr)_minmax(220px,0.85fr)] gap-6">
                 <div class="flex h-full flex-col justify-between">
                   <div class="max-w-md space-y-8">
-                    <div class="inline-flex rounded-full bg-white/90 px-3 py-1 text-xs font-semibold tracking-[0.24em] text-brand-500 shadow-sm">
-                      CAMPUS REUSE
-                    </div>
 
                     <div class="space-y-6">
                       <h2 class="text-[30px] font-black leading-tight text-slate-950">
-                        欢迎来到二手物品交易平台，发现身边的宝藏
+                        欢迎来到二手物品交易平台<br>发现身边的宝藏
                       </h2>
                       <p class="text-sm leading-7 text-slate-600">
                         真实分类与商品数据已接入，浏览同校正在出售的闲置好物，快速找到你需要的那一件。
@@ -656,10 +649,6 @@ onBeforeUnmount(() => {
         <div
           class="flex flex-col gap-5 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between"
         >
-          <div>
-            <p class="text-sm font-semibold uppercase tracking-[0.26em] text-brand-500">发现好物</p>
-            <h2 class="mt-2 text-2xl font-black text-slate-950">校园内常用分类</h2>
-          </div>
 
           <div class="flex gap-2 overflow-x-auto pb-1">
             <Button

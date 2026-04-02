@@ -17,18 +17,26 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+
 const searchKeyword = ref('')
 const hideChrome = computed(() => route.meta.hideChrome === true)
+const showNavbarSearch = computed(() => route.meta.showNavbarSearch !== false)
 const isLoggedIn = ref(checkLoggedIn())
 const currentUser = ref(getDisplayUser())
 const isUserMenuOpen = ref(false)
 
-const menuItems = ['我买到的', '我卖出的', '我的收藏', '退出登录']
+const menuItems = [
+  { key: 'bought', label: '我买到的', path: '/user/bought' },
+  { key: 'sold', label: '我卖出的', path: '/user/sold' },
+  { key: 'favorites', label: '我的收藏', path: '/user/favorites' },
+  { key: 'logout', label: '退出登录' },
+]
 
 let userMenuCloseTimer = null
 
 function getDisplayUser() {
   const authUser = getAuthUser()
+
   return {
     name: authUser?.name || '未登录',
     campus: authUser?.studentNo || '点击登录',
@@ -39,14 +47,14 @@ function getDisplayUser() {
 function syncAuthState() {
   isLoggedIn.value = checkLoggedIn()
   currentUser.value = getDisplayUser()
+
   if (!isLoggedIn.value) {
     closeUserMenu()
   }
 }
 
 function handleSearch() {
-  const keyword = searchKeyword.value.trim() || '全部商品'
-  console.log(`搜索校园二手商品: ${keyword}`)
+  const keyword = searchKeyword.value.trim()
   router.push({
     path: '/search',
     query: keyword ? { keyword } : {},
@@ -97,17 +105,21 @@ function scheduleCloseUserMenu() {
 function handleMenuClick(item) {
   closeUserMenu()
 
-  if (item === '退出登录') {
+  if (item.key === 'logout') {
     clearAuthSession()
     return
   }
 
-  if (!ensureLoggedIn({ source: `menu-${item}` })) {
+  if (!ensureLoggedIn({ source: `menu-${item.key}` })) {
     return
   }
 
-  console.log(`用户菜单点击: ${item}`)
-  window.alert(`${item} 功能暂未接入`)
+  if (item.path) {
+    router.push(item.path)
+    return
+  }
+
+  router.push('/user')
 }
 
 function handleOrderClick() {
@@ -115,8 +127,7 @@ function handleOrderClick() {
     return
   }
 
-  console.log('订单入口点击')
-  window.alert('订单页面暂未开放')
+  router.push('/user/bought')
 }
 
 onMounted(() => {
@@ -125,6 +136,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener(AUTH_CHANGED_EVENT, syncAuthState)
+
   if (userMenuCloseTimer) {
     window.clearTimeout(userMenuCloseTimer)
     userMenuCloseTimer = null
@@ -148,8 +160,13 @@ watch(
     >
       <div
         class="mx-auto flex max-w-[1480px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:gap-5 lg:px-8"
+        :class="showNavbarSearch ? '' : 'lg:justify-between'"
       >
-        <div class="flex items-center gap-3">
+        <button
+          type="button"
+          class="flex items-center gap-3 rounded-2xl border border-transparent bg-transparent p-1 text-left transition-colors hover:border-slate-200 hover:bg-slate-50"
+          @click="router.push('/')"
+        >
           <div
             class="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-500 text-base font-bold text-white shadow-[0_16px_34px_-18px_rgba(249,115,22,0.95)]"
           >
@@ -159,9 +176,10 @@ watch(
             <p class="text-base font-black tracking-[0.16em] text-slate-950">校园二手物品交易平台</p>
             <p class="text-xs text-slate-500">Campus Reuse Marketplace</p>
           </div>
-        </div>
+        </button>
 
         <form
+          v-if="showNavbarSearch"
           class="flex flex-1 items-center gap-2 lg:mx-auto lg:max-w-3xl"
           @submit.prevent="handleSearch"
         >
@@ -221,12 +239,12 @@ watch(
                 >
                   <button
                     v-for="item in menuItems"
-                    :key="item"
+                    :key="item.key"
                     type="button"
                     class="flex w-full cursor-pointer items-center rounded-2xl px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-brand-50 hover:text-brand-700"
                     @click="handleMenuClick(item)"
                   >
-                    {{ item }}
+                    {{ item.label }}
                   </button>
                 </div>
               </div>

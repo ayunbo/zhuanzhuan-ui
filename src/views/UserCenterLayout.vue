@@ -9,9 +9,7 @@ const route = useRoute()
 const navGroups = computed(() => [
   {
     title: null,
-    items: [
-      { label: '我的赚赚', to: '/user', exact: true },
-    ],
+    items: [{ label: '我的赚赚', to: '/user', exact: true }],
   },
   {
     title: '我的交易',
@@ -23,9 +21,7 @@ const navGroups = computed(() => [
   },
   {
     title: null,
-    items: [
-      { label: '我的收藏', to: '/user/favorites' },
-    ],
+    items: [{ label: '我的收藏', to: '/user/favorites' }],
   },
   {
     title: '账户设置',

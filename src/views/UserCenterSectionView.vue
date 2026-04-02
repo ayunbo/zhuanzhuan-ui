@@ -5,7 +5,6 @@ import { Package } from 'lucide-vue-next'
 import { Card } from '@/components/ui/card'
 
 const route = useRoute()
-
 const title = computed(() => route.meta.title || '个人中心')
 </script>
 

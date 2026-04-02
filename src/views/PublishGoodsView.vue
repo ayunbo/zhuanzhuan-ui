@@ -367,7 +367,7 @@ onMounted(() => {
   <section class="bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
     <div class="mx-auto flex max-w-4xl flex-col gap-6">
       <Card
-        class="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white px-6 py-6 sm:px-8"
+        class="overflow-visible rounded-[28px] border border-slate-200/80 bg-white px-6 py-6 sm:px-8"
       >
         <div class="flex items-center justify-between gap-4 border-b border-slate-100 pb-5">
           <div>
@@ -517,14 +517,14 @@ onMounted(() => {
                     v-if="categoryPanelOpen"
                     class="absolute left-0 top-[calc(100%+12px)] z-30 w-full overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_30px_80px_-36px_rgba(15,23,42,0.28)] sm:min-w-[720px]"
                   >
-                    <div class="grid sm:grid-cols-3">
-                      <div class="border-b border-slate-100 p-3 sm:border-b-0 sm:border-r">
+                    <div class="grid h-[420px] max-h-[70vh] sm:grid-cols-3">
+                      <div class="flex h-full min-h-0 flex-col border-b border-slate-100 p-3 sm:border-b-0 sm:border-r">
                         <div
                           class="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
                         >
                           一级分类
                         </div>
-                        <div class="space-y-1">
+                        <div class="flex-1 space-y-1 overflow-y-auto pr-1">
                           <button
                             v-for="(item, index) in level1Categories"
                             :key="item.id"
@@ -543,13 +543,13 @@ onMounted(() => {
                         </div>
                       </div>
 
-                      <div class="border-b border-slate-100 p-3 sm:border-b-0 sm:border-r">
+                      <div class="flex h-full min-h-0 flex-col border-b border-slate-100 p-3 sm:border-b-0 sm:border-r">
                         <div
                           class="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
                         >
                           二级分类
                         </div>
-                        <div class="space-y-1">
+                        <div class="flex-1 space-y-1 overflow-y-auto pr-1">
                           <button
                             v-for="(item, index) in level2Categories"
                             :key="item.id"
@@ -572,13 +572,13 @@ onMounted(() => {
                         </div>
                       </div>
 
-                      <div class="p-3">
+                      <div class="flex h-full min-h-0 flex-col p-3">
                         <div
                           class="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
                         >
                           三级分类
                         </div>
-                        <div class="space-y-1">
+                        <div class="flex-1 space-y-1 overflow-y-auto pr-1">
                           <button
                             v-for="item in level3Categories"
                             :key="item.id"

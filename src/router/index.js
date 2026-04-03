@@ -33,6 +33,11 @@ const router = createRouter({
       component: () => import('../views/SearchResultView.vue'),
     },
     {
+      path: '/goods/:id',
+      name: 'goods-detail',
+      component: () => import('../views/GoodsDetailView.vue'),
+    },
+    {
       path: '/user',
       component: () => import('../views/UserCenterLayout.vue'),
       meta: {

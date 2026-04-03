@@ -461,6 +461,10 @@ function handleViewportChange() {
   }
 }
 
+function openGoodsDetail(goodsId) {
+  router.push(`/goods/${goodsId}`)
+}
+
 watch(
   () => route.fullPath,
   async () => {
@@ -597,7 +601,8 @@ onBeforeUnmount(() => {
             <article
               v-for="product in products"
               :key="product.id"
-              class="group overflow-hidden rounded-[20px] border border-slate-200 bg-white transition duration-300 hover:-translate-y-1 hover:border-brand-200 hover:shadow-[0_24px_50px_-30px_rgba(15,23,42,0.35)]"
+              class="group cursor-pointer overflow-hidden rounded-[20px] border border-slate-200 bg-white transition duration-300 hover:-translate-y-1 hover:border-brand-200 hover:shadow-[0_24px_50px_-30px_rgba(15,23,42,0.35)]"
+              @click="openGoodsDetail(product.id)"
             >
               <div class="aspect-square overflow-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-white">
                 <img

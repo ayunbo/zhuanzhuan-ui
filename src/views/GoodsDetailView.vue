@@ -257,12 +257,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="bg-slate-50 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
-    <div class="mx-auto flex max-w-[1480px] flex-col gap-5">
-      <Card class="border border-slate-200/80 bg-white px-5 py-4 shadow-sm sm:px-6">
-        <div v-if="loading" class="flex min-h-24 items-center justify-center">
+  <section class="bg-slate-50 px-4 pb-10 pt-4 sm:px-6 lg:px-8">
+    <div class="mx-auto flex max-w-[1480px] flex-col gap-4">
+      <Card class="border border-slate-200/80 bg-white px-4 py-2 shadow-sm sm:px-5">
+        <div v-if="loading" class="flex min-h-16 items-center justify-center">
           <div
-            class="inline-flex items-center gap-3 rounded-full bg-slate-100 px-5 py-3 text-sm font-medium text-slate-500"
+            class="inline-flex items-center gap-3 rounded-full bg-slate-100 px-5 py-2.5 text-sm font-medium text-slate-500"
           >
             <LoaderCircle class="h-4 w-4 animate-spin" />
             正在加载卖家信息
@@ -272,24 +272,26 @@ onBeforeUnmount(() => {
         <button
           v-else
           type="button"
-          class="flex w-full items-center justify-between gap-4 rounded-[26px] border border-transparent bg-transparent px-4 py-4 text-left transition hover:border-slate-200 hover:bg-white"
+          class="flex w-full items-center justify-between gap-4 rounded-[20px] border border-transparent bg-transparent px-3 py-2 text-left transition hover:border-slate-200 hover:bg-white"
           @click="openSellerDialog"
         >
-          <div class="flex min-w-0 items-center gap-4">
+          <div class="flex min-w-0 items-center gap-3">
             <Avatar
               size="lg"
               :src="detail.sellerAvatar"
               :fallback="detail.sellerName?.slice(0, 1) || '卖'"
             />
-            <div class="min-w-0 space-y-1.5">
+            <div class="min-w-0 space-y-1">
               <div class="flex flex-wrap items-center gap-2">
-                <p class="truncate text-lg font-black text-slate-950">{{ detail.sellerName || '校园卖家' }}</p>
+                <p class="truncate text-base font-black text-slate-950">
+                  {{ detail.sellerName || '校园卖家' }}
+                </p>
                 <Badge variant="success">
                   <BadgeCheck class="mr-1 h-3.5 w-3.5" />
                   信用 {{ sellerScoreLabel }}
                 </Badge>
               </div>
-              <div class="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+              <div class="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                 <span>{{ detail.sellerCampus || '校园内卖家' }}</span>
                 <span>累计评价 {{ detail.sellerReviewCount || 0 }}</span>
               </div>
@@ -301,25 +303,25 @@ onBeforeUnmount(() => {
       </Card>
 
       <Card class="border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
-        <div v-if="loading" class="flex min-h-[620px] items-center justify-center">
+        <div v-if="loading" class="flex min-h-[560px] items-center justify-center">
           <div
-            class="inline-flex items-center gap-3 rounded-full bg-slate-100 px-5 py-3 text-sm font-medium text-slate-500"
+            class="inline-flex items-center gap-3 rounded-full bg-slate-100 px-5 py-2.5 text-sm font-medium text-slate-500"
           >
             <LoaderCircle class="h-4 w-4 animate-spin" />
             正在加载商品详情
           </div>
         </div>
 
-        <div v-else class="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_430px]">
-          <div class="grid gap-4 lg:grid-cols-[88px_minmax(0,1fr)]">
+        <div v-else class="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_420px]">
+          <div class="grid gap-4 lg:grid-cols-[84px_minmax(0,1fr)]">
             <div
-              class="flex max-h-[620px] gap-3 overflow-x-auto lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto lg:pr-1"
+              class="flex max-h-[560px] gap-3 overflow-x-auto lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto lg:pr-1"
             >
               <button
                 v-for="(image, index) in galleryImages"
                 :key="image.id"
                 type="button"
-                class="h-20 w-20 shrink-0 overflow-hidden rounded-2xl border bg-slate-50 transition"
+                class="h-[74px] w-[74px] shrink-0 overflow-hidden rounded-2xl border bg-slate-50 transition"
                 :class="
                   selectedImageIndex === index
                     ? 'border-brand-400 shadow-[0_14px_30px_-18px_rgba(249,115,22,0.85)]'
@@ -332,40 +334,47 @@ onBeforeUnmount(() => {
             </div>
 
             <div
-              class="flex min-h-[620px] items-center justify-center overflow-hidden rounded-[28px] bg-slate-50"
+              class="flex min-h-[560px] items-center justify-center overflow-hidden rounded-[28px] bg-slate-50"
             >
               <img
                 v-if="currentImage"
                 :src="currentImage"
                 :alt="detail.title"
-                class="h-full max-h-[620px] w-full object-contain"
+                class="h-full max-h-[560px] w-full object-contain"
               />
               <div v-else class="text-sm text-slate-400">暂无图片</div>
             </div>
           </div>
 
-          <div class="flex min-h-[620px] flex-col rounded-[28px] bg-white p-2">
-            <div class="space-y-5">
+          <div class="flex min-h-[560px] flex-col rounded-[28px] bg-white p-1">
+            <div class="space-y-4">
               <div class="space-y-3">
-                <div class="flex flex-wrap items-center gap-2">
-                  <p class="text-4xl font-black tracking-tight text-brand-500">￥{{ formatPrice(detail.price) }}</p>
-                  <p v-if="detail.oldPrice" class="text-base text-slate-400 line-through">
-                    ￥{{ formatPrice(detail.oldPrice) }}
-                  </p>
-                </div>
+                <div class="flex items-start justify-between gap-4">
+                  <div class="space-y-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <p class="text-4xl font-black tracking-tight text-brand-500">
+                        ¥{{ formatPrice(detail.price) }}
+                      </p>
+                      <p v-if="detail.oldPrice" class="text-base text-slate-400 line-through">
+                        ¥{{ formatPrice(detail.oldPrice) }}
+                      </p>
+                    </div>
+                  </div>
 
-                <div class="flex flex-wrap items-center gap-2">
-                  <Badge variant="warning">{{ qualityLabel }}</Badge>
-                  <Badge variant="secondary">{{ detail.statusDesc || '在售' }}</Badge>
-                  <Badge variant="outline">{{ detail.categoryName || '未分类' }}</Badge>
+                  <div class="shrink-0 text-right">
+                    <p class="text-sm font-semibold text-slate-900">{{ qualityLabel }}</p>
+                    <p class="mt-2 text-sm text-slate-400">
+                      {{ detail.favoriteCount || 0 }}人收藏 | {{ detail.viewCount || 0 }}浏览
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div class="space-y-3">
-                <h1 class="text-[30px] font-black leading-tight text-slate-950">
+              <div class="space-y-2">
+                <h1 class="text-[22px] font-bold leading-snug text-slate-950">
                   {{ detail.title || '未命名商品' }}
                 </h1>
-                <div class="rounded-[24px] bg-slate-50 px-4 py-4 text-sm leading-7 text-slate-600">
+                <div class="text-sm leading-6 text-slate-600">
                   <p
                     v-for="(line, index) in detailLines"
                     :key="`${line}-${index}`"
@@ -376,53 +385,49 @@ onBeforeUnmount(() => {
                 </div>
               </div>
 
-              <div class="grid gap-3 rounded-[24px] border border-slate-100 bg-white p-4 text-sm text-slate-500">
+              <div
+                class="grid gap-3 rounded-[24px] border border-slate-100 bg-white p-4 text-sm text-slate-500"
+              >
                 <div class="flex items-center justify-between gap-4">
-                  <span>交易方式</span>
+                  <span>面交地点</span>
                   <span class="font-medium text-slate-700">{{ detail.location || '校园面交' }}</span>
-                </div>
-                <div class="flex items-center justify-between gap-4">
-                  <span>分类</span>
-                  <span class="font-medium text-slate-700">{{ detail.categoryName || '未分类' }}</span>
                 </div>
                 <div class="flex items-center justify-between gap-4">
                   <span>发布时间</span>
                   <span class="font-medium text-slate-700">{{ publishTimeLabel }}</span>
                 </div>
-                <div class="flex items-center justify-between gap-4">
-                  <span>浏览 / 收藏</span>
-                  <span class="font-medium text-slate-700">
-                    {{ detail.viewCount || 0 }} / {{ detail.favoriteCount || 0 }}
-                  </span>
-                </div>
               </div>
-            </div>
 
-            <div class="mt-auto space-y-3 pt-8">
-              <Button size="lg" class="h-12 w-full justify-center text-base font-bold" @click="handleChat">
-                <MessageCircle class="h-4 w-4" />
-                聊一聊
-              </Button>
+              <div class="flex items-center gap-3">
+                <div class="grid min-w-0 flex-1 grid-cols-2 overflow-hidden rounded-full">
+                  <button
+                    type="button"
+                    class="flex h-12 items-center justify-center gap-2 bg-[#ffe55c] px-4 text-base font-bold text-slate-900 transition hover:bg-[#ffdf40]"
+                    @click="handleChat"
+                  >
+                    <MessageCircle class="h-4 w-4" />
+                    聊一聊
+                  </button>
+                  <button
+                    type="button"
+                    class="flex h-12 items-center justify-center gap-2 bg-slate-800 px-4 text-base font-bold text-white transition hover:bg-slate-700"
+                    @click="handleBuyNow"
+                  >
+                    <ShoppingBag class="h-4 w-4" />
+                    立即购买
+                  </button>
+                </div>
 
-              <Button
-                variant="secondary"
-                size="lg"
-                class="h-12 w-full justify-center text-base font-bold"
-                @click="handleBuyNow"
-              >
-                <ShoppingBag class="h-4 w-4" />
-                立即购买
-              </Button>
-
-              <Button
-                variant="outline"
-                size="lg"
-                class="h-12 w-full justify-center text-base font-bold"
-                @click="handleFavorite"
-              >
-                <Heart class="h-4 w-4" />
-                收藏
-              </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  class="h-12 shrink-0 justify-center rounded-full px-6 text-base font-bold"
+                  @click="handleFavorite"
+                >
+                  <Heart class="h-4 w-4" />
+                  收藏
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -444,7 +449,9 @@ onBeforeUnmount(() => {
               :fallback="detail.sellerName?.slice(0, 1) || '卖'"
             />
             <div class="min-w-0">
-              <p class="truncate text-base font-bold text-slate-950">{{ detail.sellerName || '校园卖家' }}</p>
+              <p class="truncate text-base font-bold text-slate-950">
+                {{ detail.sellerName || '校园卖家' }}
+              </p>
               <p class="mt-1 text-sm text-slate-500">{{ detail.sellerCampus || '校园内卖家' }}</p>
             </div>
           </div>

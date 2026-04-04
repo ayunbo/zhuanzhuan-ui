@@ -1,6 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 
+const userCenterMeta = {
+  showNavbarSearch: false,
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -40,16 +44,14 @@ const router = createRouter({
     {
       path: '/user',
       component: () => import('../views/UserCenterLayout.vue'),
-      meta: {
-        showNavbarSearch: false,
-      },
+      meta: userCenterMeta,
       children: [
         {
           path: '',
           name: 'user-center',
           component: () => import('../views/UserCenterHomeView.vue'),
           meta: {
-            showNavbarSearch: false,
+            ...userCenterMeta,
           },
         },
         {
@@ -57,7 +59,7 @@ const router = createRouter({
           name: 'user-published',
           component: () => import('../views/UserCenterSectionView.vue'),
           meta: {
-            showNavbarSearch: false,
+            ...userCenterMeta,
             title: '我发布的',
           },
         },
@@ -66,7 +68,7 @@ const router = createRouter({
           name: 'user-sold',
           component: () => import('../views/UserCenterSectionView.vue'),
           meta: {
-            showNavbarSearch: false,
+            ...userCenterMeta,
             title: '我卖出的',
           },
         },
@@ -75,7 +77,7 @@ const router = createRouter({
           name: 'user-bought',
           component: () => import('../views/UserCenterSectionView.vue'),
           meta: {
-            showNavbarSearch: false,
+            ...userCenterMeta,
             title: '我买到的',
           },
         },
@@ -84,7 +86,7 @@ const router = createRouter({
           name: 'user-favorites',
           component: () => import('../views/UserCenterSectionView.vue'),
           meta: {
-            showNavbarSearch: false,
+            ...userCenterMeta,
             title: '我的收藏',
           },
         },
@@ -93,17 +95,17 @@ const router = createRouter({
           name: 'user-profile',
           component: () => import('../views/UserProfileSettingsView.vue'),
           meta: {
-            showNavbarSearch: false,
+            ...userCenterMeta,
             title: '个人资料',
           },
         },
         {
           path: 'security',
           name: 'user-security',
-          component: () => import('../views/UserCenterSectionView.vue'),
+          component: () => import('../views/UserSellerAuthView.vue'),
           meta: {
-            showNavbarSearch: false,
-            title: '账号与安全',
+            ...userCenterMeta,
+            title: '身份认证',
           },
         },
       ],

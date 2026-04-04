@@ -27,7 +27,7 @@ const navGroups = computed(() => [
     title: '账户设置',
     items: [
       { label: '个人资料', to: '/user/profile' },
-      { label: '账号与安全', to: '/user/security' },
+      { label: '身份认证', to: '/user/security' },
     ],
   },
 ])

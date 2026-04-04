@@ -280,7 +280,7 @@ watch(
       </div>
     </header>
 
-    <main :class="hideChrome ? 'min-h-screen' : 'pt-36 sm:pt-32 lg:pt-24'">
+    <main :class="hideChrome ? 'min-h-screen' : 'pt-32 sm:pt-28 lg:pt-20'">
       <RouterView />
     </main>
 

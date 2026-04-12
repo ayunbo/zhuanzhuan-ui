@@ -1,5 +1,6 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { Check, ChevronRight, ImagePlus, LoaderCircle, Trash2, UploadCloud } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -11,6 +12,7 @@ const MAX_TITLE_LENGTH = 100
 const MAX_LOCATION_LENGTH = 120
 const MIN_QUALITY = 1
 const MAX_QUALITY = 5
+const route = useRoute()
 
 const form = reactive({
   categoryId: '',
@@ -186,6 +188,22 @@ function buildPayload() {
   }
 }
 
+function applyGoodsDetail(data = {}) {
+  currentGoodsId.value = data.id ?? null
+  form.categoryId = data.categoryId !== null && data.categoryId !== undefined ? String(data.categoryId) : ''
+  form.title = data.title || ''
+  form.detail = data.detail || ''
+  form.price = data.price !== null && data.price !== undefined ? String(data.price) : ''
+  form.oldPrice = data.oldPrice !== null && data.oldPrice !== undefined ? String(data.oldPrice) : ''
+  form.quality = data.quality !== null && data.quality !== undefined ? String(data.quality) : '5'
+  form.location = data.location || ''
+  form.imageUrls = Array.isArray(data.images)
+    ? data.images
+        .map((item) => item?.url)
+        .filter(Boolean)
+    : []
+}
+
 async function fetchCategories() {
   loadingCategories.value = true
   try {
@@ -200,6 +218,23 @@ async function fetchCategories() {
     showToast(error.message || '分类加载失败', 'error')
   } finally {
     loadingCategories.value = false
+  }
+}
+
+async function fetchGoodsDetail(goodsId) {
+  if (!goodsId) {
+    return
+  }
+
+  try {
+    const { data } = await request.get(`/user/seller/goods/${goodsId}`)
+    if (data?.code !== 1 || !data?.data) {
+      throw new Error(data?.msg || '商品详情加载失败')
+    }
+
+    applyGoodsDetail(data.data)
+  } catch (error) {
+    showToast(error.message || '商品详情加载失败', 'error')
   }
 }
 
@@ -361,6 +396,17 @@ async function handleSubmitAudit() {
 onMounted(() => {
   fetchCategories()
 })
+
+watch(
+  () => route.query.id,
+  (value) => {
+    const goodsId = Number(value)
+    if (Number.isFinite(goodsId) && goodsId > 0) {
+      fetchGoodsDetail(goodsId)
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 // Category API: GET /user/category/tree -> data:[{ id, parentId, name, level, sort, status, children }]
 // Goods API: GET /user/goods (or /user/goods/page) -> data:{ total, records:[{ id, sellerId, categoryId, categoryName, title, price, oldPrice, quality, location, status, statusDesc, cover, viewCount, favoriteCount, sellerName, sellerAvatar, publishTime }] }
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -227,7 +227,7 @@ function handleQuickAction(label) {
     if (!ensureLoggedIn({ source: 'home-verify' })) {
       return
     }
-    window.alert('认证入口暂未开放')
+    router.push('/user/security')
     return
   }
 

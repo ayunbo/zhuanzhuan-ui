@@ -42,6 +42,11 @@ const router = createRouter({
       component: () => import('../views/GoodsDetailView.vue'),
     },
     {
+      path: '/seller/:id',
+      name: 'seller-profile',
+      component: () => import('../views/SellerProfileView.vue'),
+    },
+    {
       path: '/user',
       component: () => import('../views/UserCenterLayout.vue'),
       meta: userCenterMeta,
@@ -57,7 +62,7 @@ const router = createRouter({
         {
           path: 'published',
           name: 'user-published',
-          component: () => import('../views/UserCenterSectionView.vue'),
+          component: () => import('../views/UserPublishedGoodsView.vue'),
           meta: {
             ...userCenterMeta,
             title: '我发布的',

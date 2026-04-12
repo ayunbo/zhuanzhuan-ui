@@ -13,6 +13,7 @@ import {
   getAuthUser,
   isLoggedIn as checkLoggedIn,
   openLoginDialog,
+  validateAuthSession,
 } from '@/utils/request'
 
 const route = useRoute()
@@ -52,6 +53,16 @@ function syncAuthState() {
   if (!isLoggedIn.value) {
     closeUserMenu()
   }
+}
+
+async function validateGlobalSession(openDialogOnFail = false) {
+  if (!checkLoggedIn()) {
+    syncAuthState()
+    return
+  }
+
+  await validateAuthSession({ openDialogOnFail })
+  syncAuthState()
 }
 
 function handleSearch() {
@@ -131,12 +142,19 @@ function handleOrderClick() {
   router.push('/user/bought')
 }
 
+function handleWindowFocus() {
+  validateGlobalSession(false)
+}
+
 onMounted(() => {
   window.addEventListener(AUTH_CHANGED_EVENT, syncAuthState)
+  window.addEventListener('focus', handleWindowFocus)
+  validateGlobalSession(false)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener(AUTH_CHANGED_EVENT, syncAuthState)
+  window.removeEventListener('focus', handleWindowFocus)
 
   if (userMenuCloseTimer) {
     window.clearTimeout(userMenuCloseTimer)
@@ -150,6 +168,13 @@ watch(
     searchKeyword.value = typeof keyword === 'string' ? keyword : ''
   },
   { immediate: true },
+)
+
+watch(
+  () => route.fullPath,
+  () => {
+    validateGlobalSession(false)
+  },
 )
 </script>
 

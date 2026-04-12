@@ -14,19 +14,12 @@ import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import request, { ensureLoggedIn } from '@/utils/request'
 
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
-const sellerDialogOpen = ref(false)
 const selectedImageIndex = ref(0)
 
 const detail = reactive({
@@ -215,8 +208,12 @@ function selectImage(index) {
   selectedImageIndex.value = index
 }
 
-function openSellerDialog() {
-  sellerDialogOpen.value = true
+function openSellerSpace() {
+  if (!detail.sellerId) {
+    return
+  }
+
+  router.push(`/seller/${detail.sellerId}`)
 }
 
 function handleChat() {
@@ -273,7 +270,7 @@ onBeforeUnmount(() => {
           v-else
           type="button"
           class="flex w-full items-center justify-between gap-4 rounded-[20px] border border-transparent bg-transparent px-3 py-2 text-left transition hover:border-slate-200 hover:bg-white"
-          @click="openSellerDialog"
+          @click="openSellerSpace"
         >
           <div class="flex min-w-0 items-center gap-3">
             <Avatar
@@ -433,34 +430,6 @@ onBeforeUnmount(() => {
         </div>
       </Card>
     </div>
-
-    <Dialog :open="sellerDialogOpen" @update:open="(value) => (sellerDialogOpen = value)">
-      <DialogContent class="max-w-[420px]">
-        <DialogHeader>
-          <DialogTitle class="text-2xl font-black tracking-tight text-slate-950">
-            卖家主页开发中
-          </DialogTitle>
-        </DialogHeader>
-        <div class="space-y-4 pt-2">
-          <div class="flex items-center gap-4 rounded-[24px] bg-slate-50 px-4 py-4">
-            <Avatar
-              size="lg"
-              :src="detail.sellerAvatar"
-              :fallback="detail.sellerName?.slice(0, 1) || '卖'"
-            />
-            <div class="min-w-0">
-              <p class="truncate text-base font-bold text-slate-950">
-                {{ detail.sellerName || '校园卖家' }}
-              </p>
-              <p class="mt-1 text-sm text-slate-500">{{ detail.sellerCampus || '校园内卖家' }}</p>
-            </div>
-          </div>
-          <p class="text-sm leading-7 text-slate-500">
-            卖家主页、更多在售商品与信用详情正在开发中，当前可先通过“聊一聊”与卖家沟通。
-          </p>
-        </div>
-      </DialogContent>
-    </Dialog>
 
     <transition
       enter-active-class="transition duration-200"

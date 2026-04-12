@@ -5,6 +5,8 @@ export const AUTH_USER_KEY = 'zhuanzhuan-user-info'
 export const OPEN_LOGIN_DIALOG_EVENT = 'zhuanzhuan:open-login-dialog'
 export const AUTH_CHANGED_EVENT = 'zhuanzhuan:auth-changed'
 
+let unauthorizedDialogOpened = false
+
 export function getToken() {
   return window.localStorage.getItem(AUTH_TOKEN_KEY) || ''
 }
@@ -39,6 +41,7 @@ export function setAuthSession(loginData) {
     return
   }
 
+  unauthorizedDialogOpened = false
   window.localStorage.setItem(AUTH_TOKEN_KEY, loginData.token)
   window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(loginData))
   notifyAuthChanged()
@@ -63,6 +66,28 @@ export function ensureLoggedIn(payload = {}) {
   return false
 }
 
+function isAuthFailureMessage(message = '') {
+  return /未登录|未登入|登录已过期|登入已过期|token|令牌|认证失败|请先登录/i.test(message)
+}
+
+function handleUnauthorized(payload = {}) {
+  clearAuthSession()
+
+  if (payload.openDialog === false) {
+    return
+  }
+
+  if (unauthorizedDialogOpened) {
+    return
+  }
+
+  unauthorizedDialogOpened = true
+  openLoginDialog({
+    reason: 'unauthorized',
+    ...payload,
+  })
+}
+
 const request = axios.create({
   baseURL: '/api',
   timeout: 5000,
@@ -80,17 +105,66 @@ request.interceptors.request.use(
 )
 
 request.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const message = response?.data?.msg || ''
+    if (response?.data?.code === 0 && isAuthFailureMessage(message) && getToken()) {
+      handleUnauthorized({
+        responseMessage: message,
+        openDialog: response.config?.skipAuthRedirect ? false : true,
+      })
+    }
+
+    return response
+  },
   (error) => {
-    if (error.response?.status === 401) {
-      clearAuthSession()
-      openLoginDialog({
-        reason: 'unauthorized',
+    if (error.response?.status === 401 && getToken()) {
+      handleUnauthorized({
+        openDialog: error.config?.skipAuthRedirect ? false : true,
       })
     }
 
     return Promise.reject(error)
   },
 )
+
+export async function validateAuthSession(options = {}) {
+  const { openDialogOnFail = false } = options
+  const token = getToken()
+
+  if (!token) {
+    return false
+  }
+
+  try {
+    const { data } = await request.get('/user/profile', {
+      skipAuthRedirect: !openDialogOnFail,
+    })
+
+    if (data?.code !== 1 || !data?.data) {
+      if (isAuthFailureMessage(data?.msg || '')) {
+        handleUnauthorized({
+          responseMessage: data?.msg || '',
+          openDialog: openDialogOnFail,
+        })
+        return false
+      }
+
+      return false
+    }
+
+    const existing = getAuthUser() || {}
+    setAuthSession({
+      ...existing,
+      token,
+      studentNo: data.data.studentNo ?? existing.studentNo ?? '',
+      name: data.data.name ?? data.data.studentNo ?? existing.name ?? '',
+      avatar: data.data.avatar ?? existing.avatar ?? '',
+    })
+
+    return true
+  } catch {
+    return false
+  }
+}
 
 export default request

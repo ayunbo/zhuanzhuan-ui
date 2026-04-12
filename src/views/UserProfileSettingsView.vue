@@ -7,7 +7,13 @@ import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import request, { getAuthUser, getToken, setAuthSession } from '@/utils/request'
+import request, {
+  AUTH_CHANGED_EVENT,
+  getAuthUser,
+  getToken,
+  isLoggedIn as checkLoggedIn,
+  setAuthSession,
+} from '@/utils/request'
 
 const PHONE_PATTERN = /^1\d{10}$/
 const DISPLAY_NAME_PATTERN = /^[\u4e00-\u9fa5A-Za-z0-9_\-\s]{1,20}$/
@@ -289,11 +295,21 @@ function goBack() {
 
 onMounted(() => {
   fetchProfile()
+  window.addEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
 })
 
 onBeforeUnmount(() => {
   window.clearTimeout(showToast.timer)
+  window.removeEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
 })
+
+function handleAuthChanged() {
+  if (!checkLoggedIn()) {
+    return
+  }
+
+  fetchProfile()
+}
 </script>
 
 <template>

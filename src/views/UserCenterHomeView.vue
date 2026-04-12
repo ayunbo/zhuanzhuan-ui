@@ -15,7 +15,13 @@ import {
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import request, { getAuthUser, getToken, setAuthSession } from '@/utils/request'
+import request, {
+  AUTH_CHANGED_EVENT,
+  getAuthUser,
+  getToken,
+  isLoggedIn as checkLoggedIn,
+  setAuthSession,
+} from '@/utils/request'
 
 const router = useRouter()
 const loading = ref(false)
@@ -160,11 +166,21 @@ function goToProfileSettings() {
 
 onMounted(() => {
   fetchProfile()
+  window.addEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
 })
 
 onBeforeUnmount(() => {
   window.clearTimeout(showToast.timer)
+  window.removeEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
 })
+
+function handleAuthChanged() {
+  if (!checkLoggedIn()) {
+    return
+  }
+
+  fetchProfile()
+}
 </script>
 
 <template>

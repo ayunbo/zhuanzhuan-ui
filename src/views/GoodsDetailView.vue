@@ -14,13 +14,15 @@ import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import request, { ensureLoggedIn } from '@/utils/request'
+import request, { AUTH_CHANGED_EVENT, ensureLoggedIn, isLoggedIn } from '@/utils/request'
 
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
 const selectedImageIndex = ref(0)
+const favoriteLoading = ref(false)
+const isFavorited = ref(false)
 
 const detail = reactive({
   id: null,
@@ -98,6 +100,19 @@ const detailLines = computed(() =>
     ? detail.detail.split(/\r?\n/).filter((line) => line.trim())
     : ['卖家暂未补充更多描述。'],
 )
+const isOnSale = computed(() => Number(detail.status) === 3)
+const isSold = computed(() => Number(detail.status) === 5)
+const buyButtonText = computed(() => {
+  if (isSold.value) {
+    return '已卖掉'
+  }
+
+  if (!isOnSale.value) {
+    return detail.statusDesc || '暂不可买'
+  }
+
+  return '立即购买'
+})
 
 function showToast(message, type = 'success') {
   toast.visible = true
@@ -197,10 +212,35 @@ async function fetchDetail() {
 
     applyDetail(data.data)
     selectedImageIndex.value = 0
+    await syncFavoriteStatus()
   } catch (error) {
     showToast(getErrorMessage(error, '商品详情加载失败'), 'error')
   } finally {
     loading.value = false
+  }
+}
+
+async function syncFavoriteStatus() {
+  if (!detail.id || !isLoggedIn()) {
+    isFavorited.value = false
+    return
+  }
+
+  try {
+    const { data } = await request.get(`/user/favorites/${detail.id}/status`, {
+      skipAuthRedirect: true,
+    })
+
+    if (data?.code !== 1) {
+      throw new Error(data?.msg || '收藏状态加载失败')
+    }
+
+    isFavorited.value = Boolean(data.data?.favorited)
+  } catch (error) {
+    isFavorited.value = false
+    if (error?.response?.status !== 401) {
+      showToast(getErrorMessage(error, '收藏状态加载失败'), 'error')
+    }
   }
 }
 
@@ -227,14 +267,50 @@ function handleBuyNow() {
   if (!ensureLoggedIn({ source: 'goods-detail-buy' })) {
     return
   }
-  showToast('立即购买功能开发中')
+  if (!isOnSale.value) {
+    showToast(isSold.value ? '商品已卖掉' : detail.statusDesc || '当前商品暂不可购买', 'error')
+    return
+  }
+  if (!detail.id) {
+    return
+  }
+  router.push(`/checkout/${detail.id}`)
 }
 
 function handleFavorite() {
   if (!ensureLoggedIn({ source: 'goods-detail-favorite' })) {
     return
   }
-  showToast('收藏功能开发中')
+  if (!detail.id || favoriteLoading.value) {
+    return
+  }
+
+  window.clearTimeout(handleFavorite.timer)
+  handleFavorite.timer = window.setTimeout(async () => {
+    favoriteLoading.value = true
+
+    try {
+      const method = isFavorited.value ? 'delete' : 'post'
+      const actionText = isFavorited.value ? '取消收藏' : '收藏'
+      const { data } = await request[method](`/user/favorites/${detail.id}`)
+
+      if (data?.code !== 1) {
+        throw new Error(data?.msg || `${actionText}失败`)
+      }
+
+      isFavorited.value = Boolean(data.data?.favorited)
+      detail.favoriteCount = Number(data.data?.favoriteCount ?? detail.favoriteCount ?? 0)
+      showToast(isFavorited.value ? '已收藏' : '已取消收藏')
+    } catch (error) {
+      showToast(getErrorMessage(error, isFavorited.value ? '取消收藏失败' : '收藏失败'), 'error')
+    } finally {
+      favoriteLoading.value = false
+    }
+  }, 180)
+}
+
+function handleAuthChanged() {
+  syncFavoriteStatus()
 }
 
 watch(
@@ -246,10 +322,13 @@ watch(
 
 onMounted(() => {
   fetchDetail()
+  window.addEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
 })
 
 onBeforeUnmount(() => {
   window.clearTimeout(showToast.timer)
+  window.clearTimeout(handleFavorite.timer)
+  window.removeEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
 })
 </script>
 
@@ -331,7 +410,7 @@ onBeforeUnmount(() => {
             </div>
 
             <div
-              class="flex min-h-[560px] items-center justify-center overflow-hidden rounded-[28px] bg-slate-50"
+              class="relative flex min-h-[560px] items-center justify-center overflow-hidden rounded-[28px] bg-slate-50"
             >
               <img
                 v-if="currentImage"
@@ -340,6 +419,14 @@ onBeforeUnmount(() => {
                 class="h-full max-h-[560px] w-full object-contain"
               />
               <div v-else class="text-sm text-slate-400">暂无图片</div>
+              <div v-if="isSold" class="absolute inset-0 bg-slate-950/20" />
+              <div v-if="isSold" class="absolute inset-0 flex items-center justify-center">
+                <div
+                  class="-rotate-12 rounded-full border-4 border-white/90 px-9 py-4 text-3xl font-black tracking-[0.18em] text-white shadow-[0_14px_40px_-18px_rgba(15,23,42,0.5)]"
+                >
+                  卖掉了
+                </div>
+              </div>
             </div>
           </div>
 
@@ -407,22 +494,34 @@ onBeforeUnmount(() => {
                   </button>
                   <button
                     type="button"
-                    class="flex h-12 items-center justify-center gap-2 bg-slate-800 px-4 text-base font-bold text-white transition hover:bg-slate-700"
+                    class="flex h-12 items-center justify-center gap-2 px-4 text-base font-bold text-white transition"
+                    :class="
+                      isOnSale
+                        ? 'bg-slate-800 hover:bg-slate-700'
+                        : 'cursor-not-allowed bg-slate-300 text-slate-500'
+                    "
+                    :disabled="!isOnSale"
                     @click="handleBuyNow"
                   >
                     <ShoppingBag class="h-4 w-4" />
-                    立即购买
+                    {{ buyButtonText }}
                   </button>
                 </div>
 
                 <Button
-                  variant="outline"
+                  :variant="isFavorited ? 'default' : 'outline'"
                   size="lg"
                   class="h-12 shrink-0 justify-center rounded-full px-6 text-base font-bold"
+                  :class="
+                    isFavorited
+                      ? 'border border-brand-500 bg-brand-500 text-white hover:bg-brand-600'
+                      : 'border border-slate-200 bg-white text-slate-700 hover:border-brand-200 hover:text-brand-600'
+                  "
+                  :disabled="favoriteLoading"
                   @click="handleFavorite"
                 >
-                  <Heart class="h-4 w-4" />
-                  收藏
+                  <Heart class="h-4 w-4" :class="isFavorited ? 'fill-current' : ''" />
+                  {{ favoriteLoading ? '处理中' : isFavorited ? '已收藏' : '收藏' }}
                 </Button>
               </div>
             </div>

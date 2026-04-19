@@ -28,6 +28,7 @@ const navGroups = computed(() => [
     items: [
       { label: '个人资料', to: '/user/profile' },
       { label: '身份认证', to: '/user/security' },
+      { label: '虚拟钱包', to: '/user/wallet' },
     ],
   },
 ])

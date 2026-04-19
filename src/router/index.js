@@ -42,6 +42,22 @@ const router = createRouter({
       component: () => import('../views/GoodsDetailView.vue'),
     },
     {
+      path: '/checkout/:id',
+      name: 'order-checkout',
+      meta: {
+        showNavbarSearch: false,
+      },
+      component: () => import('../views/OrderCheckoutView.vue'),
+    },
+    {
+      path: '/payment/:orderId',
+      name: 'payment',
+      meta: {
+        showNavbarSearch: false,
+      },
+      component: () => import('../views/PaymentView.vue'),
+    },
+    {
       path: '/seller/:id',
       name: 'seller-profile',
       component: () => import('../views/SellerProfileView.vue'),
@@ -80,7 +96,7 @@ const router = createRouter({
         {
           path: 'bought',
           name: 'user-bought',
-          component: () => import('../views/UserCenterSectionView.vue'),
+          component: () => import('../views/UserBoughtOrdersView.vue'),
           meta: {
             ...userCenterMeta,
             title: '我买到的',
@@ -89,7 +105,7 @@ const router = createRouter({
         {
           path: 'favorites',
           name: 'user-favorites',
-          component: () => import('../views/UserCenterSectionView.vue'),
+          component: () => import('../views/UserFavoritesView.vue'),
           meta: {
             ...userCenterMeta,
             title: '我的收藏',
@@ -111,6 +127,15 @@ const router = createRouter({
           meta: {
             ...userCenterMeta,
             title: '身份认证',
+          },
+        },
+        {
+          path: 'wallet',
+          name: 'user-wallet',
+          component: () => import('../views/UserWalletView.vue'),
+          meta: {
+            ...userCenterMeta,
+            title: '虚拟钱包',
           },
         },
       ],

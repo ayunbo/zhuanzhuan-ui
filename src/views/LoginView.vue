@@ -1,208 +1,89 @@
 <script setup>
-import { reactive, ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { User, Lock, ArrowRight } from '@element-plus/icons-vue'
-import { unifiedLogin } from '@/api/user'
-import { useAuthStore } from '@/stores/auth'
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { Eye, EyeOff, X } from 'lucide-vue-next'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 const router = useRouter()
-const route = useRoute()
-const authStore = useAuthStore()
+const account = ref('')
+const password = ref('')
+const showPassword = ref(false)
 
-const loading = ref(false)
-const loginFormRef = ref(null)
-
-const loginForm = reactive({
-  account: '',
-  password: '',
-})
-
-const loginRules = {
-  account: [
-    { required: true, message: '请输入账号', trigger: 'blur' },
-    { min: 4, message: '账号长度不少于4位', trigger: 'blur' }
-  ],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码长度不少于6位', trigger: 'blur' }
-  ],
+function handleClose() {
+  router.push('/')
 }
 
-const handleLogin = async () => {
-  if (!loginFormRef.value) return
-  
-  const valid = await loginFormRef.value.validate().catch(() => false)
-  if (!valid) return
-
-  loading.value = true
-  try {
-    const res = await unifiedLogin({
-      account: loginForm.account.trim(),
-      password: loginForm.password.trim()
-    })
-    
-    authStore.setLoginInfo(res)
-    ElMessage.success(`欢迎回来，${res.name || '同学'}`)
-    
-    const redirectPath = route.query.redirect || '/'
-    router.push(redirectPath)
-  } catch (error) {
-    ElMessage.error(error.message || '登录失败，请检查账号密码')
-  } finally {
-    loading.value = false
-  }
+function handleLogin() {
+  console.log('密码登录', {
+    account: account.value,
+    password: password.value,
+  })
+  window.alert('登录功能暂未接入')
 }
 </script>
 
 <template>
-  <div class="zz-login-page">
-    <div class="login-container">
-      <div class="login-card">
-        <div class="login-header">
-          <img src="@/assets/logo.jpg" alt="Logo" class="login-logo" />
-          <h1>登录赚赚</h1>
-          <p>请使用您的学号或手机号登录</p>
+  <section class="relative min-h-screen overflow-hidden bg-[#f7f8fc]">
+    <div
+      class="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.18),transparent_18%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_20%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)]"
+    />
+    <div class="absolute left-10 top-8 h-20 w-20 rounded-full bg-brand-300/50 blur-3xl" />
+    <div class="absolute right-16 top-10 h-24 w-24 rounded-full bg-yellow-200/70 blur-3xl" />
+
+    <div class="relative flex min-h-screen items-center justify-center px-4 py-10">
+      <div
+        class="w-full max-w-[560px] rounded-[36px] border border-white/80 bg-white/96 px-7 py-8 shadow-[0_40px_120px_-48px_rgba(15,23,42,0.38)] backdrop-blur sm:px-10 sm:py-10"
+      >
+        <div class="mb-8 flex items-center justify-between">
+          <div
+            class="flex h-14 w-14 items-center justify-center rounded-[20px] bg-brand-500 text-2xl font-black text-white shadow-[0_16px_34px_-18px_rgba(249,115,22,0.95)]"
+          >
+            校
+          </div>
+          <button
+            type="button"
+            class="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-brand-200 hover:text-brand-600"
+            @click="handleClose"
+          >
+            <X class="h-5 w-5" />
+          </button>
         </div>
 
-        <el-form
-          ref="loginFormRef"
-          :model="loginForm"
-          :rules="loginRules"
-          label-position="top"
-          @submit.prevent="handleLogin"
-        >
-          <el-form-item prop="account">
-            <el-input
-              v-model="loginForm.account"
-              placeholder="学号 / 手机号"
-              :prefix-icon="User"
-              size="large"
-            />
-          </el-form-item>
-          
-          <el-form-item prop="password">
-            <el-input
-              v-model="loginForm.password"
-              type="password"
-              placeholder="密码"
-              :prefix-icon="Lock"
-              show-password
-              size="large"
-            />
-          </el-form-item>
+        <div class="mb-8 text-center">
+          <h1 class="text-[38px] font-black tracking-tight text-slate-950">密码登录</h1>
+        </div>
 
-          <div class="form-options">
-            <el-checkbox>保持登录状态</el-checkbox>
-            <el-link :underline="false">忘记密码？</el-link>
+        <form class="space-y-5" @submit.prevent="handleLogin">
+          <Input
+            v-model="account"
+            type="text"
+            placeholder="请输入手机号 / 学号"
+            class="h-16 rounded-[22px] border-white bg-slate-100/90 px-6 text-lg shadow-none focus:bg-white"
+          />
+
+          <div class="relative">
+            <Input
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              placeholder="请输入密码"
+              class="h-16 rounded-[22px] border-white bg-slate-100/90 px-6 pr-16 text-lg shadow-none focus:bg-white"
+            />
+            <button
+              type="button"
+              class="absolute right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
+              @click="showPassword = !showPassword"
+            >
+              <Eye v-if="!showPassword" class="h-5 w-5" />
+              <EyeOff v-else class="h-5 w-5" />
+            </button>
           </div>
 
-          <el-button
-            type="primary"
-            class="submit-btn"
-            :loading="loading"
-            size="large"
-            native-type="submit"
-          >
-            登录 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-          </el-button>
-
-          <div class="footer-link">
-            还没有账号？ <router-link to="/register">立即注册</router-link>
-          </div>
-        </el-form>
+          <Button type="submit" class="h-16 w-full rounded-[22px] text-2xl font-black">
+            登录
+          </Button>
+        </form>
       </div>
     </div>
-    
-    <div class="login-bg-circles">
-      <div class="circle c1"></div>
-      <div class="circle c2"></div>
-    </div>
-  </div>
+  </section>
 </template>
-
-<style scoped>
-.zz-login-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #f5f5f7;
-  position: relative;
-  overflow: hidden;
-}
-
-.login-container {
-  width: 100%;
-  max-width: 420px;
-  padding: 24px;
-  z-index: 10;
-}
-
-.login-card {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(20px);
-  border-radius: var(--zz-radius-lg);
-  padding: 48px;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.05);
-}
-
-.login-header {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-.login-logo {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  margin-bottom: 20px;
-}
-
-.login-header h1 {
-  font-size: 28px;
-  font-weight: 800;
-  margin-bottom: 8px;
-}
-
-.login-header p {
-  color: var(--zz-text-secondary);
-  font-size: 15px;
-}
-
-.form-options {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 32px;
-}
-
-.submit-btn {
-  width: 100%;
-  height: 50px;
-  font-size: 16px;
-  margin-bottom: 24px;
-}
-
-.footer-link {
-  text-align: center;
-  font-size: 14px;
-  color: var(--zz-text-secondary);
-}
-
-.footer-link a {
-  color: var(--zz-primary);
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.login-bg-circles .circle {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.2;
-}
-
-.c1 { width: 400px; height: 400px; background: var(--zz-primary); top: -100px; right: -100px; }
-.c2 { width: 300px; height: 300px; background: var(--zz-success); bottom: -50px; left: -50px; }
-</style>

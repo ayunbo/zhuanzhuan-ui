@@ -1,5 +1,21 @@
 import { AUTH_STORAGE_KEYS } from '@/constants/auth'
 
+const CURRENT_AUTH_STORAGE_KEYS = {
+  token: 'zhuanzhuan-user-token',
+  user: 'zhuanzhuan-user-info',
+}
+
+function readStorageValue(...keys) {
+  for (const key of keys) {
+    const value = localStorage.getItem(key)
+    if (value) {
+      return value
+    }
+  }
+
+  return ''
+}
+
 function safeParseUser(rawUser) {
   if (!rawUser) {
     return null
@@ -18,11 +34,11 @@ function safeParseUser(rawUser) {
 }
 
 export function getStoredToken() {
-  return localStorage.getItem(AUTH_STORAGE_KEYS.token) || ''
+  return readStorageValue(CURRENT_AUTH_STORAGE_KEYS.token, AUTH_STORAGE_KEYS.token)
 }
 
 export function getStoredUser() {
-  return safeParseUser(localStorage.getItem(AUTH_STORAGE_KEYS.user))
+  return safeParseUser(readStorageValue(CURRENT_AUTH_STORAGE_KEYS.user, AUTH_STORAGE_KEYS.user))
 }
 
 export function setStoredAuth(loginInfo) {
@@ -39,11 +55,17 @@ export function setStoredAuth(loginInfo) {
     avatar: loginInfo.avatar ?? '',
   }
 
+  const userPayload = JSON.stringify(normalizedUser)
+
+  localStorage.setItem(CURRENT_AUTH_STORAGE_KEYS.token, loginInfo.token)
+  localStorage.setItem(CURRENT_AUTH_STORAGE_KEYS.user, userPayload)
   localStorage.setItem(AUTH_STORAGE_KEYS.token, loginInfo.token)
-  localStorage.setItem(AUTH_STORAGE_KEYS.user, JSON.stringify(normalizedUser))
+  localStorage.setItem(AUTH_STORAGE_KEYS.user, userPayload)
 }
 
 export function clearStoredAuth() {
+  localStorage.removeItem(CURRENT_AUTH_STORAGE_KEYS.token)
+  localStorage.removeItem(CURRENT_AUTH_STORAGE_KEYS.user)
   localStorage.removeItem(AUTH_STORAGE_KEYS.token)
   localStorage.removeItem(AUTH_STORAGE_KEYS.user)
 }

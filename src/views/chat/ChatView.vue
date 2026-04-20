@@ -15,9 +15,9 @@ import {
   markNoticeRead as requestMarkNoticeRead,
 } from '@/api/notify'
 import NoticeSessionPanel from '@/components/notify/NoticeSessionPanel.vue'
-import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { useNotifyStore } from '@/stores/notify'
+import { getAuthUser } from '@/utils/request'
 import { resolveNoticeTargetRoute } from '@/utils/notify/target'
 import {
   createNoticeVirtualSession,
@@ -27,7 +27,6 @@ import {
 
 const router = useRouter()
 const route = useRoute()
-const authStore = useAuthStore()
 const chatStore = useChatStore()
 const notifyStore = useNotifyStore()
 
@@ -260,7 +259,8 @@ async function handleSessionClick(session) {
 async function initSessionFromRouteQuery() {
   const goodsId = Number(route.query.goodsId)
   const sellerId = Number(route.query.sellerId)
-  const buyerId = Number(route.query.buyerId || authStore.user.id)
+  const currentUser = getAuthUser()
+  const buyerId = Number(route.query.buyerId || currentUser?.id)
 
   if (!goodsId || !sellerId || !buyerId) return null
 

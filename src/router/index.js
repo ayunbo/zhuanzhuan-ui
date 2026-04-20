@@ -42,6 +42,14 @@ const router = createRouter({
       component: () => import('../views/GoodsDetailView.vue'),
     },
     {
+      path: '/chat',
+      name: 'chat',
+      meta: {
+        showNavbarSearch: false,
+      },
+      component: () => import('../views/chat/ChatView.vue'),
+    },
+    {
       path: '/checkout/:id',
       name: 'order-checkout',
       meta: {

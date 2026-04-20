@@ -20,6 +20,8 @@ import {
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { useChatStore } from '@/stores/chat'
+import { useNotifyStore } from '@/stores/notify'
 import request, {
   AUTH_CHANGED_EVENT,
   ensureLoggedIn,
@@ -29,6 +31,8 @@ import request, {
 } from '@/utils/request'
 
 const router = useRouter()
+const chatStore = useChatStore()
+const notifyStore = useNotifyStore()
 
 const PAGE_SIZE = 18
 
@@ -47,6 +51,8 @@ const hasMore = ref(true)
 const loadAnchor = ref(null)
 const isLoggedIn = ref(checkLoggedIn())
 const currentUser = ref(getDisplayUser())
+const messageUnreadCount = computed(() => chatStore.unreadTotal + notifyStore.unreadTotal)
+const messageUnreadText = computed(() => (messageUnreadCount.value > 99 ? '99+' : String(messageUnreadCount.value)))
 
 let observer
 
@@ -235,6 +241,9 @@ function handleQuickAction(label) {
     if (!ensureLoggedIn({ source: 'home-message' })) {
       return
     }
+
+    router.push('/chat')
+    return
   }
 
   console.log(`快捷操作点击: ${label}`)
@@ -786,10 +795,16 @@ onBeforeUnmount(() => {
       </Button>
       <button
         type="button"
-        class="flex h-14 w-14 items-center justify-center rounded-[28px] border border-slate-200 bg-white text-slate-700 shadow-[0_18px_40px_-26px_rgba(15,23,42,0.35)] transition hover:-translate-y-1 hover:border-brand-200 hover:text-brand-600"
+        class="relative flex h-14 w-14 items-center justify-center rounded-[28px] border border-slate-200 bg-white text-slate-700 shadow-[0_18px_40px_-26px_rgba(15,23,42,0.35)] transition hover:-translate-y-1 hover:border-brand-200 hover:text-brand-600"
         @click="handleQuickAction('消息')"
       >
         <MessageCircle class="h-5 w-5" />
+        <span
+          v-if="messageUnreadCount > 0"
+          class="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-500 px-1.5 text-center text-[11px] font-bold leading-5 text-white shadow-[0_8px_18px_-8px_rgba(239,68,68,0.9)]"
+        >
+          {{ messageUnreadText }}
+        </span>
       </button>
     </div>
 
@@ -801,10 +816,16 @@ onBeforeUnmount(() => {
       </Button>
       <button
         type="button"
-        class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:border-brand-200 hover:text-brand-600"
+        class="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:border-brand-200 hover:text-brand-600"
         @click="handleQuickAction('消息')"
       >
         <MessageCircle class="h-5 w-5" />
+        <span
+          v-if="messageUnreadCount > 0"
+          class="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-500 px-1.5 text-center text-[11px] font-bold leading-5 text-white shadow-[0_8px_18px_-8px_rgba(239,68,68,0.9)]"
+        >
+          {{ messageUnreadText }}
+        </span>
       </button>
     </div>
   </section>

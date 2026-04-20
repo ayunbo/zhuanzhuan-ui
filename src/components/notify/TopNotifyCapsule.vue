@@ -127,11 +127,14 @@ onBeforeUnmount(() => {
   gap: 14px;
   border-radius: 22px;
   padding: 14px 16px 14px 14px;
-  background: linear-gradient(180deg, #fffef8 0%, #fff8e4 100%);
-  border: 1px solid rgba(246, 191, 66, 0.55);
+  background:
+    radial-gradient(circle at 14% 18%, rgba(255, 239, 218, 0.42), transparent 38%),
+    radial-gradient(circle at 76% 18%, rgba(236, 246, 255, 0.7), transparent 44%),
+    linear-gradient(105deg, #fffdf9 0%, #fff8ef 35%, #fbfcfb 60%, #f5fbff 100%);
+  border: 1px solid rgba(226, 232, 240, 0.72);
   box-shadow:
-    0 24px 40px rgba(48, 34, 0, 0.16),
-    0 8px 14px rgba(48, 34, 0, 0.08);
+    0 24px 42px rgba(95, 121, 153, 0.09),
+    0 10px 18px rgba(148, 93, 52, 0.035);
 }
 
 .capsule-accent {
@@ -140,8 +143,12 @@ onBeforeUnmount(() => {
   border-radius: 14px;
   display: grid;
   place-items: center;
-  color: #8a5200;
-  background: radial-gradient(circle at 30% 30%, #fff5b8 0%, #ffd260 72%, #ffb114 100%);
+  color: #c08a61;
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.9), transparent 42%),
+    linear-gradient(145deg, #fffaf5 0%, #ffedd7 58%, #eef7ff 100%);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  box-shadow: 0 14px 28px rgba(95, 121, 153, 0.08);
   font-size: 20px;
 }
 
@@ -156,27 +163,28 @@ onBeforeUnmount(() => {
 .tag {
   border-radius: 999px;
   padding: 4px 10px;
-  background: rgba(255, 210, 96, 0.45);
-  color: #8a5200;
+  background: rgba(255, 255, 255, 0.78);
+  color: #9b755b;
   font-size: 12px;
   font-weight: 700;
+  border: 1px solid rgba(255, 235, 211, 0.76);
 }
 
 .time {
-  color: #876f45;
+  color: #7c8a9a;
   font-size: 12px;
 }
 
 .capsule-copy h4 {
   margin: 0;
-  color: #2d230e;
+  color: #334155;
   font-size: 16px;
   font-weight: 800;
 }
 
 .capsule-copy p {
   margin: 6px 0 0;
-  color: #5b4a25;
+  color: #64748b;
   font-size: 13px;
   line-height: 1.55;
 }
@@ -187,10 +195,12 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   padding: 8px 14px;
   cursor: pointer;
-  background: #23201a;
-  color: #fff9eb;
+  background: rgba(255, 255, 255, 0.82);
+  color: #9b755b;
   font-size: 12px;
   font-weight: 700;
+  border: 1px solid rgba(255, 235, 211, 0.82);
+  box-shadow: 0 12px 24px rgba(95, 121, 153, 0.075);
 }
 
 .action-btn:hover {
@@ -205,12 +215,12 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   cursor: pointer;
-  color: #6f5b30;
+  color: #94a3b8;
   background: transparent;
 }
 
 .close-btn:hover {
-  background: rgba(111, 91, 48, 0.08);
+  background: rgba(255, 255, 255, 0.62);
 }
 
 .notify-drop-enter-active,

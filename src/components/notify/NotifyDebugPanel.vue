@@ -3,9 +3,9 @@ import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Bell, CloseBold, Promotion, SetUp } from '@element-plus/icons-vue'
 import { publishMockNotice } from '@/api/notify'
-import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { useNotifyStore } from '@/stores/notify'
+import { getAuthUser } from '@/utils/request'
 
 const SCENE_PRESETS = [
   {
@@ -45,16 +45,16 @@ const SCENE_PRESETS = [
   },
 ]
 
-const authStore = useAuthStore()
 const chatStore = useChatStore()
 const notifyStore = useNotifyStore()
+const authUser = getAuthUser()
 
 const expanded = ref(false)
 const publishing = ref(false)
 const responsePayload = ref(null)
 const form = reactive({
-  receiverUserId: '',
-  bizId: '',
+  receiverUserId: authUser?.id ? String(authUser.id) : '',
+  bizId: String(SCENE_PRESETS[0].bizId),
   scene: SCENE_PRESETS[0].key,
   title: SCENE_PRESETS[0].title,
   content: SCENE_PRESETS[0].content,
@@ -69,6 +69,13 @@ const socketStatusText = computed(() => {
   if (chatStore.socketStatus === 'connecting') return '连接中'
   if (chatStore.socketStatus === 'disconnected') return '已断开'
   return '空闲'
+})
+
+const socketStatusClass = computed(() => {
+  if (chatStore.socketStatus === 'connected') return 'ok'
+  if (chatStore.socketStatus === 'connecting') return 'pending'
+  if (chatStore.socketStatus === 'disconnected') return 'warn'
+  return ''
 })
 
 const lastNoticeText = computed(() => {
@@ -87,6 +94,7 @@ function formatStamp(stamp) {
   if (!stamp) return '暂无'
   const date = new Date(stamp)
   if (Number.isNaN(date.getTime())) return '暂无'
+
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(
     date.getSeconds(),
   ).padStart(2, '0')}`
@@ -100,8 +108,10 @@ function applyPreset(sceneKey) {
   form.title = preset.title
   form.content = preset.content
   form.bizId = String(preset.bizId)
+
   if (!form.receiverUserId) {
-    form.receiverUserId = authStore.user.id ? String(authStore.user.id) : ''
+    const currentUser = getAuthUser()
+    form.receiverUserId = currentUser?.id ? String(currentUser.id) : ''
   }
 }
 
@@ -122,13 +132,14 @@ async function handlePublish() {
     if (form.title.trim()) {
       payload.title = form.title.trim()
     }
+
     if (form.content.trim()) {
       payload.content = form.content.trim()
     }
 
     const result = await publishMockNotice(payload)
     responsePayload.value = result
-    ElMessage.success('通知 mock 发布成功')
+    ElMessage.success('通知 mock 发布成功，观察顶部弹窗和 WS 状态')
   } catch (error) {
     responsePayload.value = {
       error: error?.message || '通知 mock 发布失败',
@@ -137,10 +148,6 @@ async function handlePublish() {
   } finally {
     publishing.value = false
   }
-}
-
-if (authStore.user.id) {
-  form.receiverUserId = String(authStore.user.id)
 }
 </script>
 
@@ -157,8 +164,9 @@ if (authStore.user.id) {
       <aside v-if="expanded" class="notify-dev-panel">
         <div class="panel-header">
           <div>
+            <p class="eyebrow">Notify Mock Panel</p>
             <h3>通知调试面板</h3>
-            <p>开发期联调 `POST /user/notice/mock/publish`</p>
+            <p class="subtitle">调用 POST /user/notice/mock/publish，验证实时推送闭环。</p>
           </div>
           <button type="button" class="close-button" @click="expanded = false">
             <el-icon><CloseBold /></el-icon>
@@ -168,13 +176,13 @@ if (authStore.user.id) {
         <div class="status-grid">
           <div class="status-card">
             <span class="status-label">WebSocket</span>
-            <strong>{{ socketStatusText }}</strong>
+            <strong :class="socketStatusClass">{{ socketStatusText }}</strong>
           </div>
           <div class="status-card">
             <span class="status-label">通知未读</span>
             <strong>{{ notifyStore.unreadTotal }}</strong>
           </div>
-          <div class="status-card">
+          <div class="status-card wide">
             <span class="status-label">最近 notice.message</span>
             <strong>{{ lastNoticeText }}</strong>
             <small>{{ formatStamp(notifyStore.lastIncomingNotice?.__stamp) }}</small>
@@ -212,7 +220,7 @@ if (authStore.user.id) {
 
           <label class="field field-full">
             <span>scene</span>
-            <select v-model="form.scene">
+            <select v-model="form.scene" @change="applyPreset(form.scene)">
               <option v-for="preset in SCENE_PRESETS" :key="preset.key" :value="preset.key">
                 {{ preset.key }}
               </option>
@@ -221,7 +229,7 @@ if (authStore.user.id) {
 
           <label class="field field-full">
             <span>title</span>
-            <input v-model="form.title" type="text" placeholder="可选，不填则后端自动补默认文案" />
+            <input v-model="form.title" type="text" placeholder="可选，不填则由后端补默认文案" />
           </label>
 
           <label class="field field-full">
@@ -229,7 +237,7 @@ if (authStore.user.id) {
             <textarea
               v-model="form.content"
               rows="4"
-              placeholder="可选，不填则后端自动补默认文案"
+              placeholder="可选，不填则由后端补默认文案"
             />
           </label>
         </div>
@@ -261,18 +269,20 @@ if (authStore.user.id) {
 }
 
 .entry-button {
-  border: none;
+  border: 1px solid rgba(226, 232, 240, 0.86);
   border-radius: 999px;
   padding: 12px 16px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  color: #13233c;
-  background: linear-gradient(180deg, #e8f2ff 0%, #cfe1ff 100%);
-  box-shadow: 0 14px 28px rgba(34, 75, 148, 0.2);
+  color: #1f2937;
+  background:
+    radial-gradient(circle at 12% 12%, rgba(255, 239, 218, 0.7), transparent 38%),
+    linear-gradient(105deg, #fffdf9 0%, #fff8ef 42%, #f5fbff 100%);
+  box-shadow: 0 16px 34px rgba(95, 121, 153, 0.16);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .notify-dev-panel {
@@ -280,14 +290,15 @@ if (authStore.user.id) {
   right: 20px;
   bottom: 84px;
   z-index: 2150;
-  width: min(92vw, 430px);
+  width: min(92vw, 460px);
   max-height: min(78vh, 820px);
   overflow: auto;
-  border: 1px solid #dbe5f3;
-  border-radius: 20px;
-  background: #fff;
-  box-shadow: 0 24px 48px rgba(19, 35, 60, 0.18);
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 28px 64px rgba(15, 23, 42, 0.16);
   padding: 18px;
+  backdrop-filter: blur(18px);
 }
 
 .panel-header {
@@ -297,17 +308,27 @@ if (authStore.user.id) {
   gap: 12px;
 }
 
+.eyebrow {
+  margin: 0 0 4px;
+  color: #f97316;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
 .panel-header h3 {
   margin: 0;
   color: #13233c;
-  font-size: 18px;
-  font-weight: 800;
+  font-size: 19px;
+  font-weight: 900;
 }
 
-.panel-header p {
+.subtitle {
   margin: 6px 0 0;
-  color: #73839a;
+  color: #64748b;
   font-size: 12px;
+  line-height: 1.5;
 }
 
 .close-button {
@@ -330,13 +351,17 @@ if (authStore.user.id) {
 }
 
 .status-card {
-  border-radius: 14px;
-  background: #f7faff;
-  border: 1px solid #e2e9f5;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.status-card.wide {
+  grid-column: 1 / -1;
 }
 
 .status-label {
@@ -349,6 +374,18 @@ if (authStore.user.id) {
   font-size: 13px;
   line-height: 1.4;
   word-break: break-word;
+}
+
+.status-card strong.ok {
+  color: #15803d;
+}
+
+.status-card strong.pending {
+  color: #ca8a04;
+}
+
+.status-card strong.warn {
+  color: #dc2626;
 }
 
 .status-card small {
@@ -371,13 +408,13 @@ if (authStore.user.id) {
   color: #31425f;
   background: #fff;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .preset-chip.active {
-  border-color: #8db1ff;
-  background: #edf4ff;
-  color: #2755b6;
+  border-color: rgba(249, 115, 22, 0.32);
+  background: #fff7ed;
+  color: #c2410c;
 }
 
 .form-grid {
@@ -396,7 +433,7 @@ if (authStore.user.id) {
 .field span {
   color: #5e6d84;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .field input,
@@ -420,8 +457,8 @@ if (authStore.user.id) {
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
-  border-color: #7da8ff;
-  box-shadow: 0 0 0 2px rgba(67, 119, 255, 0.12);
+  border-color: #fb923c;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.12);
 }
 
 .field-full {
@@ -439,7 +476,7 @@ if (authStore.user.id) {
   margin-top: 16px;
   border-radius: 16px;
   background: #0f1726;
-  color: #cfe0ff;
+  color: #dbeafe;
   overflow: hidden;
 }
 
@@ -447,7 +484,7 @@ if (authStore.user.id) {
   padding: 10px 12px;
   border-bottom: 1px solid rgba(207, 224, 255, 0.12);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .response-block pre {
@@ -487,6 +524,10 @@ if (authStore.user.id) {
   .status-grid,
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .status-card.wide {
+    grid-column: auto;
   }
 
   .panel-actions {

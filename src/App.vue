@@ -3,9 +3,14 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { ChevronDown, Search, ShoppingBag } from 'lucide-vue-next'
 import AuthDialog from '@/components/AuthDialog.vue'
+import NotifyDebugPanel from '@/components/notify/NotifyDebugPanel.vue'
+import TopNotifyCapsule from '@/components/notify/TopNotifyCapsule.vue'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useChatStore } from '@/stores/chat'
+import { useNotifyStore } from '@/stores/notify'
+import { getNoticeActionText, resolveNoticeTargetRoute } from '@/utils/notify/target'
 import {
   AUTH_CHANGED_EVENT,
   clearAuthSession,
@@ -18,6 +23,8 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const chatStore = useChatStore()
+const notifyStore = useNotifyStore()
 
 const searchKeyword = ref('')
 const hideChrome = computed(() => route.meta.hideChrome === true)
@@ -25,6 +32,13 @@ const showNavbarSearch = computed(() => route.meta.showNavbarSearch !== false)
 const isLoggedIn = ref(checkLoggedIn())
 const currentUser = ref(getDisplayUser())
 const isUserMenuOpen = ref(false)
+const notifyCapsuleVisible = ref(false)
+const notifyCapsuleVersion = ref(0)
+const notifyCapsuleNotice = ref(null)
+const notifyCapsuleActionText = computed(() => getNoticeActionText(notifyCapsuleNotice.value))
+const showNotifyDebugPanel = computed(
+  () => import.meta.env.DEV || import.meta.env.VITE_ENABLE_NOTIFY_DEBUG_PANEL === 'true',
+)
 
 const menuItems = [
   { key: 'bought', label: '我买到的', path: '/user/bought' },
@@ -53,6 +67,26 @@ function syncAuthState() {
   if (!isLoggedIn.value) {
     closeUserMenu()
   }
+
+  bootstrapMessageState()
+}
+
+async function bootstrapMessageState() {
+  if (!isLoggedIn.value) {
+    notifyCapsuleVisible.value = false
+    chatStore.reset()
+    notifyStore.reset()
+    return
+  }
+
+  chatStore.connectSocket()
+
+  await Promise.allSettled([
+    chatStore.refreshUnreadTotal(),
+    chatStore.refreshSessionList(),
+    notifyStore.refreshUnreadTotal(),
+    notifyStore.refreshSessionSummary(),
+  ])
 }
 
 async function validateGlobalSession(openDialogOnFail = false) {
@@ -118,6 +152,9 @@ function handleMenuClick(item) {
   closeUserMenu()
 
   if (item.key === 'logout') {
+    notifyCapsuleVisible.value = false
+    chatStore.reset()
+    notifyStore.reset()
     clearAuthSession()
     return
   }
@@ -142,6 +179,29 @@ function handleOrderClick() {
   router.push('/user/bought')
 }
 
+function formatNotifyTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function handleNotifyCapsuleAction() {
+  const target = resolveNoticeTargetRoute(notifyCapsuleNotice.value)
+
+  if (target) {
+    router.push(target)
+  } else {
+    router.push({ path: '/chat', query: { sessionKey: 'system-notice' } })
+  }
+
+  notifyCapsuleVisible.value = false
+}
+
+function handleNotifyCapsuleClose() {
+  notifyCapsuleVisible.value = false
+}
+
 function handleWindowFocus() {
   validateGlobalSession(false)
 }
@@ -160,6 +220,8 @@ onBeforeUnmount(() => {
     window.clearTimeout(userMenuCloseTimer)
     userMenuCloseTimer = null
   }
+
+  chatStore.disconnectSocket()
 })
 
 watch(
@@ -174,6 +236,18 @@ watch(
   () => route.fullPath,
   () => {
     validateGlobalSession(false)
+  },
+)
+
+watch(
+  () => notifyStore.lastIncomingNotice?.__stamp,
+  () => {
+    const notice = notifyStore.lastIncomingNotice
+    if (!notice || !isLoggedIn.value) return
+
+    notifyCapsuleNotice.value = notice
+    notifyCapsuleVersion.value += 1
+    notifyCapsuleVisible.value = true
   },
 )
 </script>
@@ -310,5 +384,17 @@ watch(
     </main>
 
     <AuthDialog />
+    <NotifyDebugPanel v-if="showNotifyDebugPanel" />
+    <TopNotifyCapsule
+      :visible="notifyCapsuleVisible"
+      :title="notifyCapsuleNotice?.title || '系统通知'"
+      :message="notifyCapsuleNotice?.content || ''"
+      tag="系统通知"
+      :time="formatNotifyTime(notifyCapsuleNotice?.createTime)"
+      :action-text="notifyCapsuleActionText"
+      :version="notifyCapsuleVersion"
+      @action="handleNotifyCapsuleAction"
+      @close="handleNotifyCapsuleClose"
+    />
   </div>
 </template>

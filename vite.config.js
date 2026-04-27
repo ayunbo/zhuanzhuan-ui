@@ -25,6 +25,11 @@ export default defineConfig({
         // 最终发送给后端的真实路径就变回了 http://localhost:8080/user/login
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
+      '/ws': {
+        target: 'ws://localhost:8080',
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
 })

@@ -270,7 +270,7 @@ watch(
           <div
             class="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-500 text-base font-bold text-white shadow-[0_16px_34px_-18px_rgba(249,115,22,0.95)]"
           >
-            转转
+            赚赚
           </div>
           <div>
             <p class="text-base font-black tracking-[0.16em] text-slate-950">校园二手物品交易平台</p>

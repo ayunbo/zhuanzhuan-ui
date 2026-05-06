@@ -1,834 +1,832 @@
-<script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+﻿<script setup>
+// Category API: GET /user/category/tree -> data:[{ id, parentId, name, level, sort, status, children }]
+// Goods API: GET /user/goods (or /user/goods/page) -> data:{ total, records:[{ id, sellerId, categoryId, categoryName, title, price, oldPrice, quality, location, status, statusDesc, cover, viewCount, favoriteCount, sellerName, sellerAvatar, publishTime }] }
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowRight,
-  Goods,
-  Iphone,
-  Monitor,
-  Reading,
-  ShoppingBag,
-  Suitcase,
-} from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import MarketplaceEmptyState from '@/components/MarketplaceEmptyState.vue'
-import MarketplaceProductCard from '@/components/MarketplaceProductCard.vue'
-import { fetchCategoryTree } from '@/api/category'
-import { fetchPublicGoodsPage } from '@/api/goods'
+  Bike,
+  BookOpen,
+  ChevronRight,
+  LoaderCircle,
+  MessageCircle,
+  MonitorSmartphone,
+  Package,
+  Plus,
+  ShieldCheck,
+  Shirt,
+  Sparkles,
+} from 'lucide-vue-next'
+import { Avatar } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { useChatStore } from '@/stores/chat'
+import { useNotifyStore } from '@/stores/notify'
+import request, {
+  AUTH_CHANGED_EVENT,
+  ensureLoggedIn,
+  getAuthUser,
+  isLoggedIn as checkLoggedIn,
+  openLoginDialog,
+} from '@/utils/request'
 
 const router = useRouter()
+const chatStore = useChatStore()
+const notifyStore = useNotifyStore()
 
-const loading = ref(false)
-const categoryTree = ref([])
-const recommendGoods = ref([])
-const latestGoods = ref([])
-const heroBlocks = ref([])
-const activeTab = ref('all')
-const activeCategoryId = ref('')
-const showMegaPanel = ref(false)
+const PAGE_SIZE = 18
 
-let megaCloseTimer = 0
+const categories = ref([])
+const activeMegaMenuId = ref(null)
+const activeCategoryMode = ref('all')
+const activeRootCategoryId = ref(null)
+const activeExactCategoryId = ref(null)
+const products = ref([])
+const page = ref(1)
+const total = ref(0)
+const isLoadingCategories = ref(false)
+const isLoadingProducts = ref(false)
+const isLoadingMore = ref(false)
+const hasMore = ref(true)
+const loadAnchor = ref(null)
+const isLoggedIn = ref(checkLoggedIn())
+const currentUser = ref(getDisplayUser())
+const messageUnreadCount = computed(() => chatStore.unreadTotal + notifyStore.unreadTotal)
+const messageUnreadText = computed(() => (messageUnreadCount.value > 99 ? '99+' : String(messageUnreadCount.value)))
 
-const iconList = [Iphone, ShoppingBag, Reading, Suitcase, Goods, Monitor]
-const blockThemes = [
-  { key: 'wardrobe', color: 'yellow' },
-  { key: 'digital', color: 'blue' },
-  { key: 'anime', color: 'green' },
-  { key: 'coupon', color: 'pink' },
-]
+let observer
 
-const topCategories = computed(() => categoryTree.value.slice(0, 9))
-
-const activeCategory = computed(() => {
-  return topCategories.value.find((item) => String(item.id) === String(activeCategoryId.value)) || topCategories.value[0] || null
-})
-
-const megaCategoryGroups = computed(() => {
-  if (!activeCategory.value || !Array.isArray(activeCategory.value.children)) {
-    return []
-  }
-
-  return activeCategory.value.children.slice(0, 7).map((item) => ({
-    id: item.id,
-    title: item.name,
-    children: Array.isArray(item.children) ? item.children.slice(0, 8) : [],
-  }))
-})
-
-const categoryTabs = computed(() => {
-  const flat = flattenCategories(categoryTree.value).slice(0, 10)
-  return [{ id: 'all', name: '猜你喜欢' }].concat(
-    flat.map((item) => ({
-      id: String(item.id),
-      name: item.name,
-    })),
-  )
-})
-
-const filteredGoods = computed(() => {
-  if (activeTab.value === 'all') {
-    return latestGoods.value
-  }
-
-  return latestGoods.value.filter((item) => String(item.categoryId) === String(activeTab.value))
-})
-
-function flattenCategories(nodes, result = []) {
-  if (!Array.isArray(nodes)) {
-    return result
-  }
-
-  nodes.forEach((node) => {
-    if (!node) return
-    result.push(node)
-    flattenCategories(node.children, result)
-  })
-
-  return result
-}
-
-function normalizeCategories(nodes) {
-  if (!Array.isArray(nodes)) {
-    return []
-  }
-
-  return nodes.map((node) => ({
-    id: node.id,
-    name: node.name,
-    children: normalizeCategories(node.children),
-  }))
-}
-
-function normalizeGoods(list) {
-  if (!Array.isArray(list)) {
-    return []
-  }
-
-  return list.filter(Boolean).map((item) => ({
-    ...item,
-    title: item.title || '校园好物',
-    cover: item.cover || '',
-    sellerName: item.sellerName || item.location || '校园卖家',
-  }))
-}
-
-function getCategoryPreview(item) {
-  return Array.isArray(item?.children)
-    ? item.children
-        .slice(0, 2)
-        .map((child) => child.name)
-        .filter(Boolean)
-        .join(' / ')
-    : ''
-}
-
-function collectCategoryIds(node, bucket = new Set()) {
-  if (!node) {
-    return bucket
-  }
-
-  bucket.add(String(node.id))
-
-  if (Array.isArray(node.children)) {
-    node.children.forEach((child) => collectCategoryIds(child, bucket))
-  }
-
-  return bucket
-}
-
-function uniqueGoods(list) {
+const categoryMap = computed(() => {
   const map = new Map()
 
-  list.forEach((item) => {
-    if (item?.id && !map.has(String(item.id))) {
-      map.set(String(item.id), item)
-    }
-  })
+  function walk(nodes, parent = null, root = null, path = []) {
+    nodes.forEach((node) => {
+      const currentRoot = root || node
+      const currentPath = [...path, node.name]
+      const normalized = {
+        ...node,
+        parent,
+        rootId: currentRoot.id,
+        pathNames: currentPath,
+        children: Array.isArray(node.children) ? node.children : [],
+      }
 
-  return Array.from(map.values())
-}
-
-function pickRandomItems(list, count) {
-  const pool = [...list]
-  const result = []
-
-  while (pool.length && result.length < count) {
-    const index = Math.floor(Math.random() * pool.length)
-    result.push(pool[index])
-    pool.splice(index, 1)
+      map.set(node.id, normalized)
+      walk(normalized.children, normalized, currentRoot, currentPath)
+    })
   }
 
-  return result
-}
+  walk(categories.value)
+  return map
+})
 
-function buildHeroBlocks(categories, goods) {
-  const goodsPool = uniqueGoods(goods)
+const rootCategories = computed(() => categories.value)
+const featuredCategories = computed(() => rootCategories.value)
+const level1Tabs = computed(() => [
+  { key: 'all', label: '全部', mode: 'all', id: null },
+  ...rootCategories.value.map((item) => ({
+    key: `root-${item.id}`,
+    label: item.name,
+    mode: 'root',
+    id: item.id,
+  })),
+])
 
-  return categories.slice(0, 4).map((category, index) => {
-    const theme = blockThemes[index % blockThemes.length]
-    const categoryIds = collectCategoryIds(category)
-    const matchedGoods = goodsPool.filter((item) => categoryIds.has(String(item.categoryId)))
-    const items = pickRandomItems(matchedGoods.length ? matchedGoods : goodsPool, 3)
+const activeMegaCategory = computed(
+  () => categoryMap.value.get(activeMegaMenuId.value) || null,
+)
 
-    return {
-      key: `${theme.key}-${category.id}`,
-      color: theme.color,
-      title: category.name,
-      subTitle: getCategoryPreview(category) || '校内热门精选',
-      items,
-    }
+const activeCategoryTitle = computed(() => {
+  if (activeCategoryMode.value === 'exact' && activeExactCategoryId.value) {
+    return categoryMap.value.get(activeExactCategoryId.value)?.name || '全部'
+  }
+
+  if (activeCategoryMode.value === 'root' && activeRootCategoryId.value) {
+    return categoryMap.value.get(activeRootCategoryId.value)?.name || '全部'
+  }
+
+  return '全部'
+})
+
+const visibleProducts = computed(() => {
+  if (activeCategoryMode.value !== 'root' || !activeRootCategoryId.value) {
+    return products.value
+  }
+
+  return products.value.filter((product) => {
+    const category = categoryMap.value.get(product.categoryId)
+    return category?.rootId === activeRootCategoryId.value
   })
+})
+
+const heroVerifyAction = {
+  label: '快速认证',
+  desc: '完成身份认证，获得更多交易权限',
+  icon: ShieldCheck,
+  accent: 'bg-emerald-50 text-emerald-700',
 }
 
-function cancelMegaPanelClose() {
-  if (megaCloseTimer) {
-    clearTimeout(megaCloseTimer)
-    megaCloseTimer = 0
+function getDisplayUser() {
+  const authUser = getAuthUser()
+  return {
+    avatarSrc: authUser?.avatar || '',
+    name: authUser?.name || '同学',
+    studentNo: authUser?.studentNo || '登录后查看订单与收藏',
+    avatar: authUser?.name?.slice(0, 1) || '校',
   }
 }
 
-function scheduleMegaPanelClose() {
-  cancelMegaPanelClose()
-  megaCloseTimer = window.setTimeout(() => {
-    showMegaPanel.value = false
-  }, 140)
+function syncAuthState() {
+  isLoggedIn.value = checkLoggedIn()
+  currentUser.value = getDisplayUser()
 }
 
-function openMegaPanel(item) {
-  cancelMegaPanelClose()
-  activeCategoryId.value = String(item.id)
-  showMegaPanel.value = true
+function getCategoryIcon(id) {
+  const iconMap = {
+    digital: MonitorSmartphone,
+    fashion: Shirt,
+    books: BookOpen,
+    transport: Bike,
+    dorm: Package,
+  }
+
+  return iconMap[id] || Sparkles
 }
 
-function goGoodsDetail(item) {
-  if (!item?.id) return
-  router.push(`/goods/${item.id}`)
+function normalizeCategoryNode(node) {
+  return {
+    id: node.id,
+    parentId: node.parentId,
+    name: node.name,
+    level: node.level,
+    sort: node.sort,
+    status: node.status,
+    children: Array.isArray(node.children) ? node.children.map(normalizeCategoryNode) : [],
+  }
 }
 
-function goGoodsList(query = {}) {
-  router.push({
-    path: '/goods',
-    query,
-  })
+function normalizeProduct(record) {
+  return {
+    id: record.id,
+    sellerId: record.sellerId,
+    categoryId: record.categoryId,
+    categoryName: record.categoryName || '未分类',
+    title: record.title || '未命名商品',
+    price: record.price,
+    oldPrice: record.oldPrice,
+    quality: record.quality,
+    location: record.location || '校内面交',
+    status: record.status,
+    statusDesc: record.statusDesc,
+    cover: record.cover || '',
+    viewCount: record.viewCount || 0,
+    favoriteCount: record.favoriteCount || 0,
+    sellerName: record.sellerName || `卖家${record.sellerId ?? ''}`,
+    sellerAvatar: record.sellerAvatar || '',
+    publishTime: record.publishTime || '',
+  }
 }
 
-function goCategory(item) {
-  if (!item?.id) {
-    goGoodsList()
+function getProductCategoryLabel(product) {
+  if (product.categoryId && categoryMap.value.has(product.categoryId)) {
+    return categoryMap.value.get(product.categoryId).name
+  }
+
+  return product.categoryName || '未分类'
+}
+
+function getProductRootId(product) {
+  if (!product.categoryId) {
+    return null
+  }
+
+  return categoryMap.value.get(product.categoryId)?.rootId || null
+}
+
+function openMegaMenu(categoryId) {
+  activeMegaMenuId.value = categoryId
+}
+
+function closeMegaMenu() {
+  activeMegaMenuId.value = null
+}
+
+function handleUserShortcut() {
+  if (isLoggedIn.value) {
+    router.push('/user')
     return
   }
 
-  activeTab.value = String(item.id)
-  goGoodsList({
-    categoryId: String(item.id),
-    categoryName: item.name,
-  })
+  openLoginDialog({ source: 'hero-user-card' })
 }
 
-async function loadHomeData() {
-  loading.value = true
-  try {
-    const [categoryData, latestPage, recommendPage] = await Promise.all([
-      fetchCategoryTree(),
-      fetchPublicGoodsPage({
-        page: 1,
-        pageSize: 20,
-        sortBy: 'latest',
-      }),
-      fetchPublicGoodsPage({
-        page: 1,
-        pageSize: 12,
-        sortBy: 'hot',
-      }),
-    ])
+function handleQuickAction(label) {
+  if (label === '发闲置' || label === '发布闲置') {
+    if (!ensureLoggedIn({ source: 'home-publish' })) {
+      return
+    }
+    router.push('/publish')
+    return
+  }
 
-    categoryTree.value = normalizeCategories(categoryData)
-    activeCategoryId.value = categoryTree.value[0]?.id ? String(categoryTree.value[0].id) : ''
-    latestGoods.value = normalizeGoods(latestPage?.records)
-    recommendGoods.value = normalizeGoods(recommendPage?.records)
-    heroBlocks.value = buildHeroBlocks(categoryTree.value, [...recommendGoods.value, ...latestGoods.value])
-  } catch (error) {
-    ElMessage.error(error.message || '首页数据加载失败')
+  if (label === '快速认证') {
+    if (!ensureLoggedIn({ source: 'home-verify' })) {
+      return
+    }
+    router.push('/user/security')
+    return
+  }
+
+  if (label === '消息' || label === '消息中心') {
+    if (!ensureLoggedIn({ source: 'home-message' })) {
+      return
+    }
+
+    router.push('/chat')
+    return
+  }
+
+  console.log(`快捷操作点击: ${label}`)
+  window.alert(`${label} 功能暂未开放`)
+}
+
+function formatPrice(value) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) {
+    return '0.00'
+  }
+
+  return amount % 1 === 0 ? String(amount) : amount.toFixed(2)
+}
+
+function openGoodsDetail(goodsId) {
+  router.push(`/goods/${goodsId}`)
+}
+
+function setAllCategory() {
+  activeCategoryMode.value = 'all'
+  activeRootCategoryId.value = null
+  activeExactCategoryId.value = null
+}
+
+function setRootCategory(rootId) {
+  activeCategoryMode.value = 'root'
+  activeRootCategoryId.value = rootId
+  activeExactCategoryId.value = null
+}
+
+function setExactCategory(categoryId) {
+  activeCategoryMode.value = 'exact'
+  activeExactCategoryId.value = categoryId
+  activeRootCategoryId.value = categoryMap.value.get(categoryId)?.rootId || null
+}
+
+function handleTabClick(tab) {
+  if (tab.mode === 'all') {
+    setAllCategory()
+    return
+  }
+
+  setRootCategory(tab.id)
+}
+
+function handleLeafCategoryClick(categoryId) {
+  setExactCategory(categoryId)
+  closeMegaMenu()
+}
+
+function handleRootCategoryClick(categoryId) {
+  setRootCategory(categoryId)
+  closeMegaMenu()
+}
+
+function buildGoodsParams(targetPage) {
+  const params = {
+    page: targetPage,
+    pageSize: PAGE_SIZE,
+  }
+
+  if (activeCategoryMode.value === 'exact' && activeExactCategoryId.value) {
+    params.categoryId = activeExactCategoryId.value
+  }
+
+  return params
+}
+
+async function fetchCategories() {
+  isLoadingCategories.value = true
+  try {
+    const response = await request.get('/user/category/tree')
+    const payload = response.data
+
+    if (payload?.code !== 1) {
+      throw new Error(payload?.msg || '分类加载失败')
+    }
+
+    categories.value = Array.isArray(payload.data) ? payload.data.map(normalizeCategoryNode) : []
   } finally {
-    loading.value = false
+    isLoadingCategories.value = false
   }
 }
 
-onMounted(loadHomeData)
-onBeforeUnmount(cancelMegaPanelClose)
+async function fetchProducts({ reset = false } = {}) {
+  const targetPage = reset ? 1 : page.value
+
+  if (reset) {
+    isLoadingProducts.value = true
+    hasMore.value = true
+  } else {
+    if (isLoadingMore.value || !hasMore.value) {
+      return
+    }
+    isLoadingMore.value = true
+  }
+
+  try {
+    const response = await request.get('/user/goods', {
+      params: buildGoodsParams(targetPage),
+    })
+    const payload = response.data
+
+    if (payload?.code !== 1) {
+      throw new Error(payload?.msg || '商品加载失败')
+    }
+
+    const pageData = payload.data || {}
+    const records = Array.isArray(pageData.records) ? pageData.records.map(normalizeProduct) : []
+    const nextTotal = Number(pageData.total || 0)
+
+    total.value = nextTotal
+    page.value = targetPage
+
+    if (reset) {
+      products.value = records
+    } else {
+      products.value.push(...records)
+    }
+
+    hasMore.value = products.value.length < nextTotal && records.length > 0
+  } finally {
+    isLoadingProducts.value = false
+    isLoadingMore.value = false
+  }
+}
+
+function loadMoreProducts() {
+  if (isLoadingProducts.value || isLoadingMore.value || !hasMore.value) {
+    return
+  }
+
+  page.value += 1
+  fetchProducts()
+}
+
+function setupObserver() {
+  if (!loadAnchor.value) {
+    return
+  }
+
+  observer?.disconnect()
+  observer = new IntersectionObserver(
+    (entries) => {
+      const [entry] = entries
+      if (entry?.isIntersecting) {
+        loadMoreProducts()
+      }
+    },
+    {
+      rootMargin: '320px 0px',
+    },
+  )
+
+  observer.observe(loadAnchor.value)
+}
+
+watch(
+  () => [activeCategoryMode.value, activeRootCategoryId.value, activeExactCategoryId.value],
+  () => {
+    fetchProducts({ reset: true })
+  },
+)
+
+onMounted(async () => {
+  window.addEventListener(AUTH_CHANGED_EVENT, syncAuthState)
+  await fetchCategories()
+  await fetchProducts({ reset: true })
+  setupObserver()
+})
+
+onBeforeUnmount(() => {
+  observer?.disconnect()
+  window.removeEventListener(AUTH_CHANGED_EVENT, syncAuthState)
+})
 </script>
 
 <template>
-  <div class="home-page zz-page">
-    <section class="hero-shell zz-white-panel">
-      <div
-        class="hero-layout"
-        @mouseenter="cancelMegaPanelClose"
-        @mouseleave="scheduleMegaPanelClose"
-      >
-        <aside class="category-board">
-          <button
-            v-for="(item, index) in topCategories"
-            :key="item.id"
-            type="button"
-            class="category-entry"
-            :class="{ 'is-active': String(item.id) === String(activeCategoryId) }"
-            @mouseenter="openMegaPanel(item)"
-            @click="goCategory(item)"
+  <section class="relative px-4 pb-20 pt-6 sm:px-6 sm:pt-8 lg:px-8">
+    <div class="mx-auto flex max-w-[1480px] flex-col gap-6">
+      <Card class="relative overflow-hidden px-4 py-4 sm:px-5 xl:px-6 xl:py-5">
+        <div
+          class="grid gap-4 overflow-hidden xl:h-[360px] xl:grid-cols-[248px_minmax(0,1fr)_280px]"
+        >
+          <div class="relative h-full min-h-0" @mouseleave="closeMegaMenu">
+            <div
+              class="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white/92 p-3 shadow-[0_20px_48px_-34px_rgba(15,23,42,0.26)]"
             >
-              <span class="category-entry__icon">
-                <el-icon><component :is="iconList[index % iconList.length]" /></el-icon>
-              </span>
-              <span class="category-entry__content">
-                <span class="category-entry__primary">{{ item.name }}</span>
-                <span v-if="getCategoryPreview(item)" class="category-entry__secondary"> / {{ getCategoryPreview(item) }}</span>
-              </span>
-            </button>
-          </aside>
 
-        <section v-if="!showMegaPanel || !activeCategory" class="hero-stage">
-          <article class="promo-poster">
-            <span class="poster-badge">校园捡漏专区</span>
-            <h1>把闲置流转给更需要它的同学</h1>
-            <p>围绕校园交易场景重做首页主屏，先把搜索、分类、逛买体验拉回正常节奏。</p>
-
-            <div class="poster-actions">
-              <el-button type="primary" @click="goGoodsList()">去逛一逛</el-button>
-              <el-button plain @click="router.push('/seller/goods?create=1')">发布闲置</el-button>
-            </div>
-          </article>
-
-          <div class="channel-grid">
-            <article
-              v-for="block in heroBlocks"
-              :key="block.key"
-              class="channel-card"
-              :class="`channel-card--${block.color}`"
-            >
-              <div class="channel-card__head">
-                <div>
-                  <h3>{{ block.title }}</h3>
-                  <p>{{ block.subTitle }}</p>
-                </div>
-
-                <button type="button" class="channel-more" @click="goGoodsList()">
-                  <el-icon><ArrowRight /></el-icon>
-                </button>
+              <div v-if="isLoadingCategories" class="mt-3 flex-1 space-y-2">
+                <div
+                  v-for="index in 6"
+                  :key="index"
+                  class="h-14 rounded-[18px] bg-slate-100/80"
+                />
               </div>
 
-              <div class="channel-items">
+              <div v-else class="mt-3 flex-1 space-y-1 overflow-y-auto pr-1">
                 <button
-                  v-for="item in block.items"
+                  v-for="item in featuredCategories"
                   :key="item.id"
                   type="button"
-                  class="channel-item"
-                  @click="goGoodsDetail(item)"
+                  class="flex w-full items-center gap-3 rounded-[18px] px-3 py-3 text-left transition"
+                  :class="
+                    activeMegaMenuId === item.id
+                      ? 'bg-slate-100 text-slate-950'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+                  "
+                  @mouseenter="openMegaMenu(item.id)"
                 >
-                  <img v-if="item.cover" :src="item.cover" :alt="item.title" />
-                  <div v-else class="channel-item__empty">暂无图片</div>
-                  <strong>￥{{ Number(item.price || 0).toFixed(2) }}</strong>
+                  <div
+                    class="flex h-9 w-9 items-center justify-center rounded-2xl"
+                    :class="item.accent"
+                  >
+                    <component :is="getCategoryIcon(item.id)" class="h-4 w-4" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold">{{ item.name }}</p>
+                    <p class="mt-0.5 truncate text-xs text-slate-400">{{ item.subtitle }}</p>
+                  </div>
+                  <ChevronRight class="h-4 w-4 shrink-0 text-slate-400" />
                 </button>
               </div>
-            </article>
-          </div>
-        </section>
-
-        <section v-else class="mega-stage">
-          <article class="mega-overlay">
-            <div class="mega-copy__head">
-              <div>
-                <span class="mega-label">分类导航</span>
-                <h2>{{ activeCategory?.name || '校园精选分类' }}</h2>
-              </div>
-              <el-button plain @click="activeCategory ? goCategory(activeCategory) : goGoodsList()">进入分类</el-button>
             </div>
 
-            <div v-if="megaCategoryGroups.length" class="mega-groups">
-              <div v-for="group in megaCategoryGroups" :key="group.id" class="mega-group">
-                <button
-                  type="button"
-                  class="mega-group__title"
-                  @click="goGoodsList({ categoryId: String(group.id), categoryName: group.title })"
-                >
-                  {{ group.title }}
-                  <el-icon><ArrowRight /></el-icon>
-                </button>
-
-                <div class="mega-group__children">
+            <div
+              v-if="activeMegaCategory"
+              class="absolute left-[calc(100%-10px)] top-0 z-50 hidden h-full w-[560px] overflow-hidden rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_34px_90px_-42px_rgba(15,23,42,0.32)] xl:block"
+              @mouseenter="openMegaMenu(activeMegaCategory.id)"
+            >
+              <div class="flex h-full min-h-0 flex-col">
+                <div class="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                  <div>
+                    <span
+                      class="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
+                      :class="activeMegaCategory.accent"
+                    >
+                      {{ activeMegaCategory.name }}
+                    </span>
+                    <h4 class="mt-3 text-2xl font-black text-slate-950">
+                      {{ activeMegaCategory.subtitle }}
+                    </h4>
+                  </div>
                   <button
-                    v-for="child in group.children"
-                    :key="child.id"
                     type="button"
-                    class="mega-child"
-                    @click="goGoodsList({ categoryId: String(child.id), categoryName: child.name })"
+                    class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-200"
+                    @click="handleRootCategoryClick(activeMegaCategory.id)"
                   >
-                    {{ child.name }}
+                    查看全部
+                    <ArrowRight class="h-3.5 w-3.5" />
                   </button>
+                </div>
+
+                <div class="mt-5 flex-1 space-y-4 overflow-y-auto pr-1">
+                  <div
+                    v-for="group in activeMegaCategory.children"
+                    :key="group.id"
+                    class="grid grid-cols-[112px_minmax(0,1fr)] gap-4 border-b border-dashed border-slate-100 pb-4 last:border-b-0 last:pb-0"
+                  >
+                    <div>
+                      <p class="text-sm font-bold text-slate-900">{{ group.name }}</p>
+                      <p class="mt-1 text-xs text-slate-400">校园热门小类</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2.5">
+                      <button
+                        v-for="leaf in group.children.length ? group.children : [group]"
+                        :key="leaf.id"
+                        type="button"
+                        class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-600 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700"
+                        @click="handleLeafCategoryClick(leaf.id)"
+                      >
+                        {{ leaf.name }}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
+          </div>
 
-            <div v-else class="mega-empty">
-              当前分类暂无更多二级分类，点击进入分类查看对应商品。
+          <div class="flex h-full min-h-0 flex-col">
+            <div
+              class="relative flex h-full min-h-0 overflow-hidden rounded-[30px] border border-slate-200/70 bg-[linear-gradient(135deg,#fff7ed_0%,#ffffff_46%,#eff6ff_100%)] px-7 py-7 shadow-[0_24px_64px_-40px_rgba(15,23,42,0.28)]"
+            >
+              <div class="absolute -right-12 top-8 h-44 w-44 rounded-full bg-orange-100/60 blur-3xl" />
+              <div class="absolute bottom-0 right-14 h-40 w-40 rounded-full bg-sky-100/70 blur-3xl" />
+              <div class="absolute right-24 top-6 h-24 w-24 rounded-full border border-white/70 bg-white/40 blur-2xl" />
+
+              <div class="relative grid h-full w-full grid-cols-[minmax(0,1.15fr)_minmax(220px,0.85fr)] gap-6">
+                <div class="flex h-full flex-col justify-between">
+                  <div class="max-w-md space-y-8">
+
+                    <div class="space-y-6">
+                      <h2 class="text-[30px] font-black leading-tight text-slate-950">
+                        欢迎来到二手物品交易平台<br>发现身边的宝藏
+                      </h2>
+                      <p class="text-sm leading-7 text-slate-600">
+                        真实分类与商品数据已接入，浏览同校正在出售的闲置好物，快速找到你需要的那一件。
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="flex max-w-md flex-wrap gap-2.5">
+                    <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
+                      {{ activeCategoryTitle }}
+                    </span>
+                    <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
+                      当前已加载 {{ visibleProducts.length }} 件
+                    </span>
+                    <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
+                      全站在售 {{ total }} 件
+                    </span>
+                  </div>
+                </div>
+
+                <div class="relative flex h-full items-center justify-center">
+                  <div class="relative h-full w-full">
+                    <div
+                      class="absolute right-1 top-6 w-[178px] rounded-[26px] border border-white/80 bg-white/90 p-4 shadow-[0_28px_60px_-34px_rgba(249,115,22,0.45)] transition duration-500 hover:-translate-y-1 hover:rotate-0"
+                      style="transform: rotate(8deg); transform-origin: center;"
+                    >
+                      <div class="rounded-[22px] bg-[linear-gradient(135deg,#fde68a_0%,#fef3c7_42%,#ffffff_100%)] p-4">
+                        <div class="h-24 rounded-[18px] bg-white/60" />
+                      </div>
+                      <div class="mt-4 space-y-2">
+                        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-orange-500">
+                          分类树
+                        </p>
+                        <p class="line-clamp-2 text-sm font-black text-slate-900">
+                          一级二级三级分类实时渲染，导航与商品筛选同步联动
+                        </p>
+                      </div>
+                    </div>
+
+                    <div
+                      class="absolute bottom-7 left-2 w-[190px] rounded-[26px] border border-white/80 bg-white/95 p-4 shadow-[0_28px_60px_-34px_rgba(15,23,42,0.28)] transition duration-500 hover:-translate-y-1 hover:rotate-0"
+                      style="transform: rotate(-7deg); transform-origin: center;"
+                    >
+                      <div class="rounded-[22px] bg-[linear-gradient(135deg,#dbeafe_0%,#eff6ff_50%,#ffffff_100%)] p-4">
+                        <div class="flex items-center justify-between">
+                          <span class="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-sky-600">
+                            商品流
+                          </span>
+                          <Sparkles class="h-4 w-4 text-sky-500" />
+                        </div>
+                        <div class="mt-4 h-20 rounded-[18px] bg-white/65" />
+                      </div>
+                      <div class="mt-4 flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                          <p class="truncate text-sm font-black text-slate-900">无限滚动分页</p>
+                          <p class="mt-1 text-xs text-slate-500">触底继续加载真实数据</p>
+                        </div>
+                        <div class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                          在线
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="absolute right-10 top-1/2 h-14 w-14 -translate-y-1/2 rounded-full bg-white/75 shadow-lg backdrop-blur transition duration-500 hover:-translate-y-[55%]">
+                      <div class="flex h-full w-full items-center justify-center">
+                        <Package class="h-6 w-6 text-brand-500" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex h-full min-h-0 flex-col">
+            <div
+              class="flex h-full min-h-0 flex-col justify-center rounded-[28px] border border-slate-200 bg-white px-5 py-6 shadow-[0_20px_48px_-34px_rgba(15,23,42,0.22)]"
+            >
+              <button
+                type="button"
+                class="flex flex-col items-center rounded-[24px] px-4 py-3 text-center transition hover:bg-slate-50"
+                @click="handleUserShortcut"
+              >
+                <Avatar
+                  size="lg"
+                  :src="currentUser.avatarSrc"
+                  :fallback="currentUser.avatar"
+                  class="h-20 w-20 text-2xl shadow-[0_18px_36px_-22px_rgba(249,115,22,0.75)]"
+                />
+                <div class="mt-5 min-w-0 space-y-2">
+                  <p class="text-sm font-semibold text-slate-500">Hi,</p>
+                  <p class="truncate text-xl font-black text-slate-950">{{ currentUser.name }}</p>
+                  <p class="truncate text-xs text-slate-400">{{ currentUser.studentNo }}</p>
+                </div>
+              </button>
+
+              <div class="mt-8">
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-4 rounded-[24px] border border-emerald-100 bg-[linear-gradient(135deg,#ecfdf5_0%,#ffffff_55%,#f0fdf4_100%)] px-5 py-5 text-left transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-[0_22px_44px_-30px_rgba(16,185,129,0.6)]"
+                  @click="handleQuickAction(heroVerifyAction.label)"
+                >
+                  <div
+                    class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
+                    :class="heroVerifyAction.accent"
+                  >
+                    <component :is="heroVerifyAction.icon" class="h-5 w-5" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-base font-black text-slate-900">{{ heroVerifyAction.label }}</p>
+                    <p class="mt-1 truncate text-xs text-slate-500">{{ heroVerifyAction.desc }}</p>
+                  </div>
+                  <ArrowRight class="h-4 w-4 shrink-0 text-slate-400" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card class="overflow-hidden px-5 py-6 sm:px-7 sm:py-7">
+        <div
+          class="flex flex-col gap-5 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between"
+        >
+
+          <div class="flex gap-2 overflow-x-auto pb-1">
+            <Button
+              v-for="tab in level1Tabs"
+              :key="tab.key"
+              size="sm"
+              :variant="
+                (tab.mode === 'all' && activeCategoryMode === 'all') ||
+                (tab.mode === 'root' && activeCategoryMode === 'root' && activeRootCategoryId === tab.id)
+                  ? 'default'
+                  : 'ghost'
+              "
+              class="shrink-0"
+              :class="
+                (tab.mode === 'all' && activeCategoryMode === 'all') ||
+                (tab.mode === 'root' && activeCategoryMode === 'root' && activeRootCategoryId === tab.id)
+                  ? 'shadow-[0_14px_34px_-18px_rgba(249,115,22,0.9)]'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              "
+              @click="handleTabClick(tab)"
+            >
+              {{ tab.label }}
+            </Button>
+          </div>
+        </div>
+
+        <div
+          v-if="isLoadingProducts && !products.length"
+          class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+        >
+          <div
+            v-for="index in PAGE_SIZE"
+            :key="index"
+            class="overflow-hidden rounded-[20px] border border-slate-200 bg-white"
+          >
+            <div class="aspect-square bg-slate-100" />
+            <div class="space-y-3 p-3">
+              <div class="h-3 rounded bg-slate-100" />
+              <div class="h-4 rounded bg-slate-100" />
+              <div class="h-4 w-1/2 rounded bg-slate-100" />
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-else
+          class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+        >
+          <article
+            v-for="product in visibleProducts"
+            :key="product.id"
+            class="group cursor-pointer overflow-hidden rounded-[20px] border border-slate-200 bg-white transition duration-300 hover:-translate-y-1 hover:border-brand-200 hover:shadow-[0_24px_50px_-30px_rgba(15,23,42,0.35)]"
+            @click="openGoodsDetail(product.id)"
+          >
+            <div
+              class="aspect-square overflow-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-white"
+            >
+              <img
+                v-if="product.cover"
+                :src="product.cover"
+                :alt="product.title"
+                class="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+              />
+            </div>
+
+            <div class="space-y-3 p-3">
+              <div class="min-w-0 space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                  <p class="truncate text-[11px] font-medium text-slate-500">
+                    {{ getProductCategoryLabel(product) }}
+                  </p>
+                  <p class="truncate text-[11px] text-slate-400">{{ product.location }}</p>
+                </div>
+                <h3 class="truncate text-sm font-semibold text-slate-900">
+                  {{ product.title }}
+                </h3>
+                <div class="flex items-center gap-2">
+                  <p class="text-lg font-semibold text-brand-600">￥{{ formatPrice(product.price) }}</p>
+                  <p
+                    v-if="product.oldPrice"
+                    class="text-xs text-slate-400 line-through"
+                  >
+                    ￥{{ formatPrice(product.oldPrice) }}
+                  </p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2.5">
+                <Avatar
+                  size="sm"
+                  :src="product.sellerAvatar"
+                  :fallback="product.sellerName?.slice(0, 1) || '卖'"
+                />
+                <div class="min-w-0 flex items-center">
+                  <p class="truncate text-xs font-semibold text-slate-800">{{ product.sellerName }}</p>
+                </div>
+              </div>
             </div>
           </article>
-        </section>
-      </div>
-    </section>
-
-    <section class="feed-shell zz-white-panel">
-      <div class="tabs-panel">
-        <div class="zz-chip-row">
-          <button
-            v-for="tab in categoryTabs"
-            :key="tab.id"
-            type="button"
-            class="zz-chip"
-            :class="{ 'is-active': activeTab === tab.id }"
-            @click="activeTab = tab.id"
-          >
-            {{ tab.name }}
-          </button>
-        </div>
-      </div>
-
-      <div class="feed-panel">
-        <div v-if="filteredGoods.length" class="goods-grid">
-          <MarketplaceProductCard
-            v-for="item in filteredGoods"
-            :key="item.id"
-            :item="item"
-            @click="goGoodsDetail"
-          />
         </div>
 
-        <MarketplaceEmptyState
-          v-else-if="!loading"
-          title="当前分类暂无商品"
-          description="可以切换到其他分类，或者直接查看全部商品。"
-          action-text="查看全部商品"
-          @action="goGoodsList()"
-        />
-      </div>
-    </section>
-  </div>
+        <div
+          v-if="!isLoadingProducts && !visibleProducts.length"
+          class="flex min-h-48 items-center justify-center text-sm text-slate-400"
+        >
+          当前分类下暂无商品
+        </div>
+
+        <div ref="loadAnchor" class="flex min-h-20 items-center justify-center pt-6">
+          <p v-if="isLoadingMore" class="inline-flex items-center gap-2 text-sm font-medium text-slate-500">
+            <LoaderCircle class="h-4 w-4 animate-spin" />
+            加载中...
+          </p>
+          <p v-else-if="!hasMore" class="text-sm font-medium text-slate-400">没有更多了</p>
+          <p v-else class="text-sm text-slate-400">继续下滑，发现更多闲置</p>
+        </div>
+      </Card>
+    </div>
+
+    <div
+      class="fixed right-5 top-1/2 z-40 hidden -translate-y-1/2 xl:flex xl:flex-col xl:items-center xl:gap-3"
+    >
+      <Button
+        size="icon"
+        class="h-14 w-14 rounded-[28px] shadow-[0_22px_50px_-24px_rgba(249,115,22,0.92)]"
+        @click="handleQuickAction('发闲置')"
+      >
+        <Plus class="h-5 w-5" />
+      </Button>
+      <button
+        type="button"
+        class="relative flex h-14 w-14 items-center justify-center rounded-[28px] border border-slate-200 bg-white text-slate-700 shadow-[0_18px_40px_-26px_rgba(15,23,42,0.35)] transition hover:-translate-y-1 hover:border-brand-200 hover:text-brand-600"
+        @click="handleQuickAction('消息')"
+      >
+        <MessageCircle class="h-5 w-5" />
+        <span
+          v-if="messageUnreadCount > 0"
+          class="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-500 px-1.5 text-center text-[11px] font-bold leading-5 text-white shadow-[0_8px_18px_-8px_rgba(239,68,68,0.9)]"
+        >
+          {{ messageUnreadText }}
+        </span>
+      </button>
+    </div>
+
+    <div
+      class="fixed inset-x-4 bottom-4 z-40 flex items-center justify-end gap-3 rounded-full border border-white/70 bg-white/95 p-2 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.35)] backdrop-blur xl:hidden"
+    >
+      <Button size="icon" class="h-11 w-11 rounded-full" @click="handleQuickAction('发闲置')">
+        <Plus class="h-4 w-4" />
+      </Button>
+      <button
+        type="button"
+        class="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:border-brand-200 hover:text-brand-600"
+        @click="handleQuickAction('消息')"
+      >
+        <MessageCircle class="h-5 w-5" />
+        <span
+          v-if="messageUnreadCount > 0"
+          class="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-500 px-1.5 text-center text-[11px] font-bold leading-5 text-white shadow-[0_8px_18px_-8px_rgba(239,68,68,0.9)]"
+        >
+          {{ messageUnreadText }}
+        </span>
+      </button>
+    </div>
+  </section>
 </template>
-
-<style scoped>
-.hero-shell {
-  padding: 12px;
-}
-
-.hero-layout {
-  --category-width: 288px;
-  display: grid;
-  grid-template-columns: var(--category-width) minmax(0, 1fr);
-  gap: 12px;
-  align-items: stretch;
-  position: relative;
-}
-
-.category-board {
-  display: grid;
-  gap: 2px;
-  padding: 12px 10px;
-  border-radius: 22px;
-  background: #f7f7f7;
-}
-
-.category-entry {
-  min-height: 38px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--zz-text);
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 0.18s ease, box-shadow 0.18s ease;
-}
-
-.category-entry:hover,
-.category-entry.is-active {
-  background: #fff4bf;
-}
-
-.category-entry.is-active {
-  font-weight: 700;
-}
-
-.category-entry__icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 10px;
-  background: #fff6cf;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-}
-
-.category-entry__content {
-  min-width: 0;
-  font-size: 14px;
-  line-height: 1.15;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.category-entry__primary {
-  color: var(--zz-black);
-}
-
-.category-entry__secondary {
-  color: var(--zz-text-secondary);
-}
-
-.hero-stage {
-  display: grid;
-  grid-template-columns: 242px minmax(0, 1fr);
-  gap: 12px;
-  min-height: 312px;
-}
-
-.mega-stage {
-  min-height: 312px;
-}
-
-.promo-poster {
-  min-height: 312px;
-  padding: 18px;
-  border-radius: 24px;
-  background:
-    radial-gradient(circle at 86% 18%, rgba(255, 255, 255, 0.22), transparent 18%),
-    radial-gradient(circle at 78% 72%, rgba(255, 226, 124, 0.38), transparent 20%),
-    linear-gradient(135deg, #ff9627 0%, #ffb63d 100%);
-  color: #fff;
-  display: flex;
-  flex-direction: column;
-}
-
-.poster-badge {
-  width: fit-content;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: rgba(255, 248, 214, 0.92);
-  color: #a86c00;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.promo-poster h1 {
-  margin-top: 14px;
-  max-width: 6.2em;
-  font-size: 38px;
-  line-height: 1;
-  letter-spacing: -0.03em;
-}
-
-.promo-poster p {
-  margin-top: 12px;
-  max-width: 16em;
-  font-size: 14px;
-  line-height: 1.55;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.poster-actions {
-  margin-top: auto;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.channel-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.channel-card {
-  min-height: 148px;
-  padding: 12px;
-  border: 3px solid transparent;
-  border-radius: 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.channel-card--yellow {
-  background: #fff7cc;
-  border-color: #f3d54a;
-}
-
-.channel-card--blue {
-  background: #dcf3ff;
-  border-color: #96ddff;
-}
-
-.channel-card--green {
-  background: #ddf9d9;
-  border-color: #9be58e;
-}
-
-.channel-card--pink {
-  background: #ffe1f1;
-  border-color: #f3b7dc;
-}
-
-.channel-card__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.channel-card__head h3 {
-  font-size: 17px;
-  color: var(--zz-black);
-}
-
-.channel-card__head p {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--zz-text-secondary);
-}
-
-.channel-more {
-  width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(34, 34, 34, 0.88);
-  color: #fff;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-
-.channel-items {
-  margin-top: auto;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.channel-item {
-  border: 0;
-  padding: 7px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.86);
-  display: grid;
-  gap: 5px;
-  cursor: pointer;
-}
-
-.channel-item img,
-.channel-item__empty {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: 12px;
-  object-fit: cover;
-  background: #fff;
-}
-
-.channel-item__empty {
-  display: grid;
-  place-items: center;
-  color: var(--zz-text-light);
-  font-size: 12px;
-}
-
-.channel-item strong {
-  color: #ff5a26;
-  text-align: center;
-  font-size: 15px;
-}
-
-.mega-overlay {
-  min-height: 100%;
-  width: 100%;
-  padding: 18px 22px;
-  border-radius: 24px;
-  border: 1px solid var(--zz-border);
-  background: #fff;
-  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
-  display: grid;
-  align-content: start;
-  gap: 16px;
-}
-
-.mega-copy__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.mega-label {
-  display: inline-flex;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: #fff6cf;
-  color: #8f6c00;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.mega-copy__head h2 {
-  margin-top: 10px;
-  font-size: 24px;
-  color: var(--zz-black);
-  line-height: 1.15;
-}
-
-.mega-groups {
-  display: grid;
-  gap: 12px;
-}
-
-.mega-group {
-  display: grid;
-  grid-template-columns: 132px minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.mega-group__title,
-.mega-child {
-  border: 0;
-  background: transparent;
-  color: var(--zz-text);
-  text-align: left;
-  cursor: pointer;
-}
-
-.mega-group__title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.mega-group__children {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 16px;
-}
-
-.mega-child {
-  color: var(--zz-text-secondary);
-  font-size: 14px;
-}
-
-.mega-empty {
-  padding: 18px;
-  border-radius: 16px;
-  background: #fafafa;
-  color: var(--zz-text-secondary);
-  line-height: 1.7;
-}
-
-.feed-shell {
-  margin-top: 8px;
-  padding: 12px;
-}
-
-.tabs-panel {
-  padding-bottom: 12px;
-  border-bottom: 1px solid #f1f1f1;
-}
-
-.feed-panel {
-  padding-top: 12px;
-}
-
-.goods-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 16px;
-}
-
-@media (max-width: 1400px) {
-  .goods-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .hero-stage {
-    grid-template-columns: 228px minmax(0, 1fr);
-  }
-
-  .promo-poster h1 {
-    font-size: 34px;
-  }
-}
-
-@media (max-width: 1120px) {
-  .hero-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-stage {
-    grid-template-columns: 1fr;
-    min-height: auto;
-  }
-
-  .promo-poster {
-    min-height: 260px;
-  }
-
-  .mega-overlay {
-    width: 100%;
-    min-height: auto;
-  }
-}
-
-@media (max-width: 960px) {
-  .channel-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 900px) {
-  .goods-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 768px) {
-  .hero-shell {
-    padding: 10px;
-  }
-
-  .hero-layout {
-    --category-width: 100%;
-  }
-
-  .promo-poster {
-    padding: 18px;
-  }
-
-  .promo-poster h1 {
-    font-size: 34px;
-  }
-
-  .channel-items {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .mega-group {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-}
-
-@media (max-width: 680px) {
-  .goods-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-</style>

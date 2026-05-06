@@ -1,241 +1,400 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-import { 
-  UserFilled, 
-  Stamp, 
-  SwitchButton, 
-  ArrowDown, 
-  Search,
-  User
-} from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterView, useRoute, useRouter } from 'vue-router'
+import { ChevronDown, Search, ShoppingBag } from 'lucide-vue-next'
+import AuthDialog from '@/components/AuthDialog.vue'
+import NotifyDebugPanel from '@/components/notify/NotifyDebugPanel.vue'
+import TopNotifyCapsule from '@/components/notify/TopNotifyCapsule.vue'
+import { Avatar } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { useChatStore } from '@/stores/chat'
+import { useNotifyStore } from '@/stores/notify'
+import { getNoticeActionText, resolveNoticeTargetRoute } from '@/utils/notify/target'
+import {
+  AUTH_CHANGED_EVENT,
+  clearAuthSession,
+  ensureLoggedIn,
+  getAuthUser,
+  isLoggedIn as checkLoggedIn,
+  openLoginDialog,
+  validateAuthSession,
+} from '@/utils/request'
 
-const router = useRouter()
 const route = useRoute()
-const authStore = useAuthStore()
-const navKeyword = ref('')
+const router = useRouter()
+const chatStore = useChatStore()
+const notifyStore = useNotifyStore()
 
-const isAuthPage = computed(() => ['login', 'register'].includes(route.name))
-const displayName = computed(() => authStore.user.name || authStore.user.studentNo || '用户')
-
-watch(
-  () => route.query.keyword,
-  (keyword) => {
-    navKeyword.value = typeof keyword === 'string' ? keyword : ''
-  },
-  { immediate: true },
+const searchKeyword = ref('')
+const hideChrome = computed(() => route.meta.hideChrome === true)
+const showNavbarSearch = computed(() => route.meta.showNavbarSearch !== false)
+const isLoggedIn = ref(checkLoggedIn())
+const currentUser = ref(getDisplayUser())
+const isUserMenuOpen = ref(false)
+const notifyCapsuleVisible = ref(false)
+const notifyCapsuleVersion = ref(0)
+const notifyCapsuleNotice = ref(null)
+const notifyCapsuleActionText = computed(() => getNoticeActionText(notifyCapsuleNotice.value))
+const showNotifyDebugPanel = computed(
+  () => import.meta.env.DEV || import.meta.env.VITE_ENABLE_NOTIFY_DEBUG_PANEL === 'true',
 )
 
-const handleGlobalSearch = () => {
-  const keyword = navKeyword.value.trim()
+const menuItems = [
+  { key: 'bought', label: '我买到的', path: '/user/bought' },
+  { key: 'sold', label: '我卖出的', path: '/user/sold' },
+  { key: 'favorites', label: '我的收藏', path: '/user/favorites' },
+  { key: 'logout', label: '退出登录' },
+]
+
+let userMenuCloseTimer = null
+
+function getDisplayUser() {
+  const authUser = getAuthUser()
+
+  return {
+    name: authUser?.name || '未登录',
+    campus: authUser?.studentNo || '点击登录',
+    avatar: authUser?.name?.slice(0, 1)?.toUpperCase() || '校',
+    avatarSrc: authUser?.avatar || '',
+  }
+}
+
+function syncAuthState() {
+  isLoggedIn.value = checkLoggedIn()
+  currentUser.value = getDisplayUser()
+
+  if (!isLoggedIn.value) {
+    closeUserMenu()
+  }
+
+  bootstrapMessageState()
+}
+
+async function bootstrapMessageState() {
+  if (!isLoggedIn.value) {
+    notifyCapsuleVisible.value = false
+    chatStore.reset()
+    notifyStore.reset()
+    return
+  }
+
+  chatStore.connectSocket()
+
+  await Promise.allSettled([
+    chatStore.refreshUnreadTotal(),
+    chatStore.refreshSessionList(),
+    notifyStore.refreshUnreadTotal(),
+    notifyStore.refreshSessionSummary(),
+  ])
+}
+
+async function validateGlobalSession(openDialogOnFail = false) {
+  if (!checkLoggedIn()) {
+    syncAuthState()
+    return
+  }
+
+  await validateAuthSession({ openDialogOnFail })
+  syncAuthState()
+}
+
+function handleSearch() {
+  const keyword = searchKeyword.value.trim()
   router.push({
-    path: '/goods',
+    path: '/search',
     query: keyword ? { keyword } : {},
   })
 }
 
-const handleLogout = () => {
-  authStore.logout()
-  ElMessage.success('已安全退出')
-  router.push('/login')
+function openAuthDialog() {
+  openLoginDialog({ source: 'navbar-avatar-click' })
 }
+
+function openUserMenu() {
+  if (!isLoggedIn.value) {
+    return
+  }
+
+  if (userMenuCloseTimer) {
+    window.clearTimeout(userMenuCloseTimer)
+    userMenuCloseTimer = null
+  }
+
+  isUserMenuOpen.value = true
+}
+
+function closeUserMenu() {
+  if (userMenuCloseTimer) {
+    window.clearTimeout(userMenuCloseTimer)
+    userMenuCloseTimer = null
+  }
+
+  isUserMenuOpen.value = false
+}
+
+function scheduleCloseUserMenu() {
+  if (!isLoggedIn.value) {
+    return
+  }
+
+  if (userMenuCloseTimer) {
+    window.clearTimeout(userMenuCloseTimer)
+  }
+
+  userMenuCloseTimer = window.setTimeout(() => {
+    isUserMenuOpen.value = false
+    userMenuCloseTimer = null
+  }, 120)
+}
+
+function handleMenuClick(item) {
+  closeUserMenu()
+
+  if (item.key === 'logout') {
+    notifyCapsuleVisible.value = false
+    chatStore.reset()
+    notifyStore.reset()
+    clearAuthSession()
+    return
+  }
+
+  if (!ensureLoggedIn({ source: `menu-${item.key}` })) {
+    return
+  }
+
+  if (item.path) {
+    router.push(item.path)
+    return
+  }
+
+  router.push('/user')
+}
+
+function handleOrderClick() {
+  if (!ensureLoggedIn({ source: 'order-entry' })) {
+    return
+  }
+
+  router.push('/user/bought')
+}
+
+function formatNotifyTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function handleNotifyCapsuleAction() {
+  const target = resolveNoticeTargetRoute(notifyCapsuleNotice.value)
+
+  if (target) {
+    router.push(target)
+  } else {
+    router.push({ path: '/chat', query: { sessionKey: 'system-notice' } })
+  }
+
+  notifyCapsuleVisible.value = false
+}
+
+function handleNotifyCapsuleClose() {
+  notifyCapsuleVisible.value = false
+}
+
+function handleWindowFocus() {
+  validateGlobalSession(false)
+}
+
+onMounted(() => {
+  window.addEventListener(AUTH_CHANGED_EVENT, syncAuthState)
+  window.addEventListener('focus', handleWindowFocus)
+  validateGlobalSession(false)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener(AUTH_CHANGED_EVENT, syncAuthState)
+  window.removeEventListener('focus', handleWindowFocus)
+
+  if (userMenuCloseTimer) {
+    window.clearTimeout(userMenuCloseTimer)
+    userMenuCloseTimer = null
+  }
+
+  chatStore.disconnectSocket()
+})
+
+watch(
+  () => route.query.keyword,
+  (keyword) => {
+    searchKeyword.value = typeof keyword === 'string' ? keyword : ''
+  },
+  { immediate: true },
+)
+
+watch(
+  () => route.fullPath,
+  () => {
+    validateGlobalSession(false)
+  },
+)
+
+watch(
+  () => notifyStore.lastIncomingNotice?.__stamp,
+  () => {
+    const notice = notifyStore.lastIncomingNotice
+    if (!notice || !isLoggedIn.value) return
+
+    notifyCapsuleNotice.value = notice
+    notifyCapsuleVersion.value += 1
+    notifyCapsuleVisible.value = true
+  },
+)
 </script>
 
 <template>
-  <div class="zz-app">
-    <!-- Navbar -->
-    <header v-if="!isAuthPage" class="zz-navbar">
-      <div class="nav-container">
-        <div class="nav-left">
-          <RouterLink to="/" class="brand">
-            <img src="@/assets/logo.jpg" alt="Logo" />
-            <span>赚赚</span>
-          </RouterLink>
-        </div>
-
-        <div class="nav-center">
-          <div class="search-bar">
-            <el-input
-              v-model="navKeyword"
-              placeholder="搜寻校内闲置宝贝..."
-              :prefix-icon="Search"
-              clearable
-              @keyup.enter="handleGlobalSearch"
-              @clear="handleGlobalSearch"
-            />
+  <div class="min-h-screen">
+    <header
+      v-if="!hideChrome"
+      class="fixed inset-x-0 top-0 z-50 border-b border-white/70 bg-white/88 backdrop-blur-xl"
+    >
+      <div
+        class="mx-auto flex max-w-[1480px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:gap-5 lg:px-8"
+        :class="showNavbarSearch ? '' : 'lg:justify-between'"
+      >
+        <button
+          type="button"
+          class="flex items-center gap-3 rounded-2xl border border-transparent bg-transparent p-1 text-left transition-colors hover:border-slate-200 hover:bg-slate-50"
+          @click="router.push('/')"
+        >
+          <div
+            class="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-500 text-base font-bold text-white shadow-[0_16px_34px_-18px_rgba(249,115,22,0.95)]"
+          >
+            赚赚
           </div>
-        </div>
-
-        <div class="nav-right">
-          <div class="nav-links">
-            <RouterLink to="/" :class="{ active: route.path === '/' }">首页</RouterLink>
-            <RouterLink to="/seller-auth" :class="{ active: route.path === '/seller-auth' }">认证</RouterLink>
+          <div>
+            <p class="text-base font-black tracking-[0.16em] text-slate-950">校园二手物品交易平台</p>
+            <p class="text-xs text-slate-500">Campus Reuse Marketplace</p>
           </div>
-          
-          <el-divider direction="vertical" />
+        </button>
 
-          <div class="user-entry">
-            <template v-if="authStore.isLoggedIn">
-              <el-dropdown trigger="click">
-                <div class="avatar-pill">
-                  <el-avatar 
-                    :size="28" 
-                    :src="authStore.user.avatar"
+        <form
+          v-if="showNavbarSearch"
+          class="flex flex-1 items-center gap-2 lg:mx-auto lg:max-w-3xl"
+          @submit.prevent="handleSearch"
+        >
+          <Input
+            v-model="searchKeyword"
+            type="search"
+            placeholder="搜教材、耳机、宿舍好物"
+            class="h-11 flex-1 border-white bg-slate-50/90 shadow-[0_10px_28px_-22px_rgba(15,23,42,0.55)]"
+          />
+          <Button type="submit" size="lg" class="h-11 shrink-0 px-5">
+            <Search class="h-4 w-4" />
+            搜索
+          </Button>
+        </form>
+
+        <div class="flex items-center justify-between gap-3 lg:justify-end">
+          <div
+            v-if="isLoggedIn"
+            class="relative hidden sm:block"
+            @mouseenter="openUserMenu"
+            @mouseleave="scheduleCloseUserMenu"
+          >
+            <button
+              type="button"
+              class="flex h-12 items-center gap-3 rounded-full border border-transparent bg-transparent px-4 transition-colors hover:border-slate-200 hover:bg-slate-50"
+              :class="isUserMenuOpen ? 'border-slate-200 bg-slate-50' : ''"
+            >
+              <Avatar size="md" :src="currentUser.avatarSrc" :fallback="currentUser.avatar" />
+              <div class="flex flex-col justify-center text-left">
+                <p class="text-[15px] font-semibold leading-none text-slate-900">
+                  {{ currentUser.name }}
+                </p>
+                <p class="mt-1 text-xs text-slate-500">{{ currentUser.campus }}</p>
+              </div>
+              <ChevronDown
+                class="h-4 w-4 text-slate-400 transition"
+                :class="isUserMenuOpen ? 'rotate-180' : ''"
+              />
+            </button>
+
+            <transition
+              enter-active-class="transition duration-150 ease-out"
+              enter-from-class="translate-y-1 opacity-0"
+              enter-to-class="translate-y-0 opacity-100"
+              leave-active-class="transition duration-100 ease-in"
+              leave-from-class="translate-y-0 opacity-100"
+              leave-to-class="translate-y-1 opacity-0"
+            >
+              <div
+                v-show="isUserMenuOpen"
+                class="absolute right-0 top-full z-[70] w-48 pt-3"
+                @mouseenter="openUserMenu"
+                @mouseleave="scheduleCloseUserMenu"
+              >
+                <div
+                  class="rounded-3xl border border-slate-200 bg-white/96 p-2 text-left shadow-[0_24px_70px_-26px_rgba(15,23,42,0.28)] backdrop-blur"
+                >
+                  <button
+                    v-for="item in menuItems"
+                    :key="item.key"
+                    type="button"
+                    class="flex w-full cursor-pointer items-center rounded-2xl px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-brand-50 hover:text-brand-700"
+                    @click="handleMenuClick(item)"
                   >
-                    <el-icon><User /></el-icon>
-                  </el-avatar>
-                  <el-icon><ArrowDown /></el-icon>
+                    {{ item.label }}
+                  </button>
                 </div>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item @click="router.push('/profile')">
-                      <el-icon><UserFilled /></el-icon>个人中心
-                    </el-dropdown-item>
-                    <el-dropdown-item @click="router.push('/seller-auth')">
-                      <el-icon><Stamp /></el-icon>卖家认证
-                    </el-dropdown-item>
-                    <el-dropdown-item divided @click="handleLogout" class="logout-text">
-                      <el-icon><SwitchButton /></el-icon>退出登录
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </template>
-            <template v-else>
-              <el-button text @click="router.push('/login')">登录</el-button>
-              <el-button type="primary" round size="small" @click="router.push('/register')">注册</el-button>
-            </template>
+              </div>
+            </transition>
           </div>
+
+          <button
+            v-else
+            type="button"
+            class="hidden h-12 items-center gap-3 rounded-full border border-transparent bg-transparent px-4 transition-colors hover:border-slate-200 hover:bg-slate-50 sm:flex"
+            @click="openAuthDialog"
+          >
+            <Avatar size="md" :src="currentUser.avatarSrc" :fallback="currentUser.avatar" />
+            <div class="flex flex-col justify-center text-left">
+              <p class="text-[15px] font-semibold leading-none text-slate-900">
+                {{ currentUser.name }}
+              </p>
+              <p class="mt-1 text-xs text-slate-500">{{ currentUser.campus }}</p>
+            </div>
+            <ChevronDown class="h-4 w-4 text-slate-400 transition" />
+          </button>
+
+          <Button
+            variant="ghost"
+            class="h-12 rounded-full border border-transparent px-5 text-base font-semibold text-slate-700 hover:border-slate-200 hover:bg-slate-50"
+            @click="handleOrderClick"
+          >
+            <ShoppingBag class="h-4 w-4" />
+            订单
+          </Button>
         </div>
       </div>
     </header>
 
-    <main :class="['zz-content', { 'full': isAuthPage }]">
-      <div :class="{ 'inner': !isAuthPage }">
-        <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
-      </div>
+    <main :class="hideChrome ? 'min-h-screen' : 'pt-32 sm:pt-28 lg:pt-20'">
+      <RouterView />
     </main>
+
+    <AuthDialog />
+    <NotifyDebugPanel v-if="showNotifyDebugPanel" />
+    <TopNotifyCapsule
+      :visible="notifyCapsuleVisible"
+      :title="notifyCapsuleNotice?.title || '系统通知'"
+      :message="notifyCapsuleNotice?.content || ''"
+      tag="系统通知"
+      :time="formatNotifyTime(notifyCapsuleNotice?.createTime)"
+      :action-text="notifyCapsuleActionText"
+      :version="notifyCapsuleVersion"
+      @action="handleNotifyCapsuleAction"
+      @close="handleNotifyCapsuleClose"
+    />
   </div>
 </template>
-
-<style scoped>
-.zz-app {
-  min-height: 100vh;
-  background-color: #ffffff;
-}
-
-.zz-navbar {
-  height: 60px;
-  background: #ffffff;
-  border-bottom: 1px solid #f0f0f0;
-  position: sticky;
-  top: 0;
-  z-index: 1000;
-}
-
-.nav-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  padding: 0 20px;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-decoration: none;
-}
-
-.brand img {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-}
-
-.brand span {
-  font-size: 18px;
-  font-weight: 900;
-  color: #1a1a1a;
-  letter-spacing: -0.5px;
-}
-
-.nav-center {
-  flex: 1;
-  padding: 0 60px;
-}
-
-.search-bar :deep(.el-input__wrapper) {
-  background-color: #f4f4f4 !important;
-  box-shadow: none !important;
-  border-radius: 20px !important;
-  height: 36px;
-}
-
-.nav-right {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.nav-links {
-  display: flex;
-  gap: 20px;
-}
-
-.nav-links a {
-  font-size: 14px;
-  font-weight: 500;
-  color: #666;
-  text-decoration: none;
-}
-
-.nav-links a.active {
-  color: #0071e3;
-  font-weight: 700;
-}
-
-.avatar-pill {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  padding: 2px;
-  border-radius: 20px;
-  transition: background 0.2s;
-}
-
-.avatar-pill:hover {
-  background: #f5f5f5;
-}
-
-.logout-text {
-  color: #ff4d4f !important;
-}
-
-.zz-content {
-  padding-top: 20px;
-}
-
-.zz-content.full {
-  padding-top: 0;
-}
-
-.inner {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
-}
-
-@media (max-width: 768px) {
-  .nav-center, .nav-links { display: none; }
-}
-</style>

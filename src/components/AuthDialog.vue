@@ -1,33 +1,32 @@
+<!-- 注册 API: POST /api/user/register；注册字段: studentNo、password、name、phone；登录 API: POST /api/user/login；登录字段: account、password -->
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { ArrowRight, Lock, Phone, Postcard, User } from '@element-plus/icons-vue'
-import { registerUser, unifiedLogin } from '@/api/user'
-import { useAuthStore } from '@/stores/auth'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import {
+  DialogContent,
+  DialogOverlay,
+  DialogPortal,
+  DialogRoot,
+  DialogTitle,
+  TabsContent,
+  TabsList,
+  TabsRoot,
+  TabsTrigger,
+} from 'radix-vue'
+import { Eye, EyeOff, LoaderCircle, X } from 'lucide-vue-next'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import request, { OPEN_LOGIN_DIALOG_EVENT, setAuthSession } from '@/utils/request'
 
-const props = defineProps({
-  modelValue: {
-    type: Boolean,
-    default: false,
-  },
-  mode: {
-    type: String,
-    default: 'login',
-  },
-})
+const STUDENT_NO_PATTERN = /^[A-Za-z0-9]{6,20}$/
+const PASSWORD_PATTERN = /^\S{6,20}$/
+const PHONE_PATTERN = /^1\d{10}$/
 
-const emit = defineEmits(['update:modelValue', 'success'])
-const authStore = useAuthStore()
-
-const visible = computed({
-  get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value),
-})
-
-const activeMode = ref('login')
-const loading = ref(false)
-const loginFormRef = ref(null)
-const registerFormRef = ref(null)
+const open = ref(false)
+const activeTab = ref('login')
+const showLoginPassword = ref(false)
+const showRegisterPassword = ref(false)
+const loginLoading = ref(false)
+const registerLoading = ref(false)
 
 const loginForm = reactive({
   account: '',
@@ -41,535 +40,476 @@ const registerForm = reactive({
   phone: '',
 })
 
-const loginRules = {
-  account: [
-    { required: true, message: '请输入账号', trigger: 'blur' },
-    { min: 4, message: '账号至少 4 位', trigger: 'blur' },
-  ],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少 6 位', trigger: 'blur' },
-  ],
+const loginErrors = reactive({
+  account: '',
+  password: '',
+  submit: '',
+})
+
+const registerErrors = reactive({
+  studentNo: '',
+  password: '',
+  name: '',
+  phone: '',
+  submit: '',
+})
+
+const toast = reactive({
+  visible: false,
+  type: 'success',
+  message: '',
+})
+
+const canSubmitLogin = computed(
+  () =>
+    loginForm.account.trim().length > 0 &&
+    loginForm.password.trim().length > 0 &&
+    !loginLoading.value,
+)
+
+const canSubmitRegister = computed(
+  () =>
+    registerForm.studentNo.trim().length > 0 &&
+    registerForm.password.trim().length > 0 &&
+    !registerLoading.value,
+)
+
+function resetLoginErrors() {
+  loginErrors.account = ''
+  loginErrors.password = ''
+  loginErrors.submit = ''
 }
 
-const registerRules = {
-  studentNo: [
-    { required: true, message: '请输入学号', trigger: 'blur' },
-    { min: 5, message: '学号至少 5 位', trigger: 'blur' },
-  ],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少 6 位', trigger: 'blur' },
-  ],
-  phone: [{ pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确', trigger: 'blur' }],
+function resetRegisterErrors() {
+  registerErrors.studentNo = ''
+  registerErrors.password = ''
+  registerErrors.name = ''
+  registerErrors.phone = ''
+  registerErrors.submit = ''
 }
 
-const sideTitle = computed(() => (activeMode.value === 'register' ? '校园认证说明' : '扫码登录占位'))
-const sideDescription = computed(() =>
-  activeMode.value === 'register'
-    ? '注册完成后可以直接使用学号和手机号登录，后续再补充头像、校园和简介。'
-    : '扫码区先保留为正式入口占位，当前仍可用学号、手机号或登录账号直登。',
-)
+function resetAllErrors() {
+  resetLoginErrors()
+  resetRegisterErrors()
+}
 
-const sideSteps = computed(() =>
-  activeMode.value === 'register'
-    ? [
-        '只填写真实学号、密码、昵称和手机号。',
-        '注册后会直接回到登录态，后续接入校园认证时可继续扩展。',
-        '头像、校园、简介等资料仍在个人中心维护。',
-      ]
-    : [
-        '账号和密码都走真实 unifiedLogin 接口。',
-        '扫码入口当前只做占位，不影响学号或手机号登录。',
-        '登录后可直接进入商品、订单和个人中心。',
-      ],
-)
+function showToast(message, type = 'success') {
+  toast.visible = true
+  toast.type = type
+  toast.message = message
 
-watch(
-  () => props.mode,
-  (mode) => {
-    activeMode.value = mode === 'register' ? 'register' : 'login'
-  },
-  { immediate: true },
-)
+  window.clearTimeout(showToast.timer)
+  showToast.timer = window.setTimeout(() => {
+    toast.visible = false
+  }, 2600)
+}
 
-watch(
-  () => props.modelValue,
-  (open) => {
-    if (open) {
-      activeMode.value = props.mode === 'register' ? 'register' : 'login'
-    }
-  },
-)
+function openDialog(mode = 'login') {
+  activeTab.value = mode === 'register' ? 'register' : 'login'
+  open.value = true
+  resetAllErrors()
+}
 
 function closeDialog() {
-  visible.value = false
-}
-
-function switchMode(mode) {
-  activeMode.value = mode === 'register' ? 'register' : 'login'
-}
-
-async function handleLogin() {
-  if (!loginFormRef.value) {
+  if (loginLoading.value || registerLoading.value) {
     return
   }
 
-  const valid = await loginFormRef.value.validate().catch(() => false)
-  if (!valid) {
+  open.value = false
+  resetAllErrors()
+}
+
+function handleOpenEvent(event) {
+  openDialog(event?.detail?.mode)
+}
+
+function validateLoginForm() {
+  resetLoginErrors()
+
+  if (!loginForm.account.trim()) {
+    loginErrors.account = '请输入学号或手机号'
+  }
+
+  if (!loginForm.password.trim()) {
+    loginErrors.password = '请输入密码'
+  } else if (!PASSWORD_PATTERN.test(loginForm.password)) {
+    loginErrors.password = '密码格式不正确，长度应为 6-20 且不能包含空格'
+  }
+
+  return !loginErrors.account && !loginErrors.password
+}
+
+function validateRegisterStudentNo() {
+  const value = registerForm.studentNo.trim()
+  if (!value) {
+    registerErrors.studentNo = '学号不能为空'
+    return false
+  }
+
+  if (!STUDENT_NO_PATTERN.test(value)) {
+    registerErrors.studentNo = '学号格式不正确，应为 6-20 位字母或数字'
+    return false
+  }
+
+  registerErrors.studentNo = ''
+  return true
+}
+
+function validateRegisterPassword() {
+  const value = registerForm.password
+  if (!value.trim()) {
+    registerErrors.password = '密码不能为空'
+    return false
+  }
+
+  if (!PASSWORD_PATTERN.test(value)) {
+    registerErrors.password = '密码格式不正确，长度应为 6-20 且不能包含空格'
+    return false
+  }
+
+  registerErrors.password = ''
+  return true
+}
+
+function validateRegisterPhone() {
+  const value = registerForm.phone.trim()
+  if (!value) {
+    registerErrors.phone = ''
+    return true
+  }
+
+  if (!PHONE_PATTERN.test(value)) {
+    registerErrors.phone = '手机号格式不正确'
+    return false
+  }
+
+  registerErrors.phone = ''
+  return true
+}
+
+function validateRegisterName() {
+  registerErrors.name = ''
+  return true
+}
+
+function validateRegisterForm() {
+  resetRegisterErrors()
+
+  const studentNoValid = validateRegisterStudentNo()
+  const passwordValid = validateRegisterPassword()
+  const nameValid = validateRegisterName()
+  const phoneValid = validateRegisterPhone()
+
+  return studentNoValid && passwordValid && nameValid && phoneValid
+}
+
+function switchToLogin() {
+  activeTab.value = 'login'
+  resetAllErrors()
+}
+
+function switchToRegister() {
+  activeTab.value = 'register'
+  resetAllErrors()
+}
+
+function getErrorMessage(error, fallback) {
+  return error?.response?.data?.msg || error?.message || fallback
+}
+
+async function handleLoginSubmit() {
+  if (!validateLoginForm()) {
     return
   }
 
-  loading.value = true
+  loginLoading.value = true
   try {
-    const result = await unifiedLogin({
+    const { data } = await request.post('/user/login', {
       account: loginForm.account.trim(),
-      password: loginForm.password.trim(),
+      password: loginForm.password,
     })
 
-    authStore.setLoginInfo(result)
-    ElMessage.success('登录成功')
-    emit('success', {
-      mode: 'login',
-      user: result,
-    })
-    visible.value = false
+    if (data?.code !== 1 || !data?.data?.token) {
+      throw new Error(data?.msg || '登录失败')
+    }
+
+    setAuthSession(data.data)
+    showToast('登录成功')
+    open.value = false
+    loginForm.password = ''
+    showLoginPassword.value = false
+    resetAllErrors()
   } catch (error) {
-    ElMessage.error(error.message || '登录失败')
+    loginErrors.submit = getErrorMessage(error, '登录失败')
   } finally {
-    loading.value = false
+    loginLoading.value = false
   }
 }
 
-async function handleRegister() {
-  if (!registerFormRef.value) {
+async function handleRegisterSubmit() {
+  if (!validateRegisterForm()) {
     return
   }
 
-  const valid = await registerFormRef.value.validate().catch(() => false)
-  if (!valid) {
-    return
-  }
-
-  loading.value = true
+  registerLoading.value = true
   try {
-    await registerUser({
+    const payload = {
       studentNo: registerForm.studentNo.trim(),
-      password: registerForm.password.trim(),
-      name: registerForm.name.trim(),
-      phone: registerForm.phone.trim(),
-    })
+      password: registerForm.password,
+      name: registerForm.name.trim() || undefined,
+      phone: registerForm.phone.trim() || undefined,
+    }
 
-    ElMessage.success('注册成功，请登录')
-    loginForm.account = registerForm.studentNo.trim()
-    loginForm.password = registerForm.password.trim()
-    activeMode.value = 'login'
+    const { data } = await request.post('/user/register', payload)
+
+    if (data?.code !== 1) {
+      throw new Error(data?.msg || '注册失败')
+    }
+
+    loginForm.account = payload.studentNo
+    loginForm.password = ''
+    registerForm.password = ''
+    showRegisterPassword.value = false
+    switchToLogin()
+    showToast('注册成功')
   } catch (error) {
-    ElMessage.error(error.message || '注册失败')
+    registerErrors.submit = getErrorMessage(error, '注册失败')
+    showToast(registerErrors.submit, 'error')
   } finally {
-    loading.value = false
+    registerLoading.value = false
   }
 }
+
+onMounted(() => {
+  window.addEventListener(OPEN_LOGIN_DIALOG_EVENT, handleOpenEvent)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener(OPEN_LOGIN_DIALOG_EVENT, handleOpenEvent)
+  window.clearTimeout(showToast.timer)
+})
 </script>
 
 <template>
-  <el-dialog
-    v-model="visible"
-    width="920px"
-    class="auth-dialog"
-    align-center
-    :show-close="false"
-    destroy-on-close
-    append-to-body
-  >
-    <div class="auth-shell">
-      <header class="auth-header">
-        <div class="brand-block">
-          <div class="brand-mark">转</div>
-          <div class="brand-copy">
-            <p>Campus Marketplace</p>
-            <strong>转转校园</strong>
+  <DialogRoot :open="open" @update:open="(value) => (value ? openDialog(activeTab) : closeDialog())">
+    <DialogPortal to="body">
+      <DialogOverlay class="fixed inset-0 z-[120] bg-slate-950/45 backdrop-blur-sm" />
+      <DialogContent
+        class="fixed left-1/2 top-1/2 z-[121] w-[calc(100vw-2rem)] max-w-[440px] -translate-x-1/2 -translate-y-1/2 rounded-[32px] border border-white/80 bg-white px-8 py-8 shadow-[0_40px_120px_-48px_rgba(15,23,42,0.38)] outline-none sm:px-10"
+      >
+        <div class="mb-7 flex items-start justify-between gap-4">
+          <div>
+            <p class="text-sm font-semibold uppercase tracking-[0.28em] text-brand-500">Campus Auth</p>
+            <DialogTitle class="mt-3 text-[30px] font-black tracking-tight text-slate-950">
+              {{ activeTab === 'login' ? '密码登录' : '用户注册' }}
+            </DialogTitle>
           </div>
+          <button
+            type="button"
+            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-400 transition hover:border-brand-200 hover:text-brand-600"
+            @click="closeDialog"
+          >
+            <X class="h-5 w-5" />
+          </button>
         </div>
-        <button type="button" class="close-btn" @click="closeDialog">×</button>
-      </header>
 
-      <div class="auth-body">
-        <section class="auth-form-column">
-          <div class="auth-intro">
-            <span class="eyebrow">账号入口</span>
-            <h2>{{ activeMode === 'register' ? '注册校园账号' : '登录继续浏览商品和订单' }}</h2>
-            <p>
-              {{ activeMode === 'register'
-                ? '先补齐学号、密码和手机号，再回到登录页进入平台。'
-                : '保持真实接口直连，登录后可直接进入商品广场、订单中心和个人中心。' }}
-            </p>
-          </div>
-
-          <nav class="mode-switch">
-            <button :class="{ active: activeMode === 'login' }" type="button" @click="switchMode('login')">
+        <TabsRoot v-model="activeTab" class="w-full">
+          <TabsList class="grid w-full grid-cols-2 rounded-full bg-slate-100 p-1.5">
+            <TabsTrigger
+              value="login"
+              class="h-11 rounded-full text-sm font-semibold outline-none transition"
+              :class="
+                activeTab === 'login'
+                  ? 'bg-white text-slate-950 shadow-[0_10px_28px_-18px_rgba(15,23,42,0.35)]'
+                  : 'text-slate-500 hover:text-slate-700'
+              "
+            >
               登录
-            </button>
-            <button :class="{ active: activeMode === 'register' }" type="button" @click="switchMode('register')">
+            </TabsTrigger>
+            <TabsTrigger
+              value="register"
+              class="h-11 rounded-full text-sm font-semibold outline-none transition"
+              :class="
+                activeTab === 'register'
+                  ? 'bg-white text-slate-950 shadow-[0_10px_28px_-18px_rgba(15,23,42,0.35)]'
+                  : 'text-slate-500 hover:text-slate-700'
+              "
+            >
               注册
-            </button>
-          </nav>
+            </TabsTrigger>
+          </TabsList>
 
-          <el-form
-            v-if="activeMode === 'login'"
-            ref="loginFormRef"
-            class="auth-form"
-            :model="loginForm"
-            :rules="loginRules"
-            label-position="top"
-            @submit.prevent="handleLogin"
-          >
-            <el-form-item label="账号" prop="account">
-              <el-input v-model="loginForm.account" :prefix-icon="User" placeholder="学号 / 手机号 / 登录账号" />
-            </el-form-item>
+          <TabsContent value="login" class="mt-8 outline-none">
+            <form class="space-y-5" @submit.prevent="handleLoginSubmit">
+              <div class="space-y-2.5">
+                <Input
+                  v-model="loginForm.account"
+                  type="text"
+                  placeholder="请输入学号或手机号"
+                  class="h-12 rounded-full border-white bg-slate-100/90 px-5 text-[15px] shadow-none focus:bg-white"
+                />
+                <p v-if="loginErrors.account" class="text-sm font-medium text-rose-500">
+                  {{ loginErrors.account }}
+                </p>
+              </div>
 
-            <el-form-item label="密码" prop="password">
-              <el-input
-                v-model="loginForm.password"
-                :prefix-icon="Lock"
-                show-password
-                type="password"
-                placeholder="请输入密码"
-              />
-            </el-form-item>
+              <div class="space-y-2.5">
+                <div class="relative">
+                  <Input
+                    v-model="loginForm.password"
+                    :type="showLoginPassword ? 'text' : 'password'"
+                    placeholder="请输入密码"
+                    class="h-12 rounded-full border-white bg-slate-100/90 px-5 pr-14 text-[15px] shadow-none focus:bg-white"
+                  />
+                  <button
+                    type="button"
+                    class="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
+                    @click="showLoginPassword = !showLoginPassword"
+                  >
+                    <Eye v-if="!showLoginPassword" class="h-5 w-5" />
+                    <EyeOff v-else class="h-5 w-5" />
+                  </button>
+                </div>
+                <p v-if="loginErrors.password" class="text-sm font-medium text-rose-500">
+                  {{ loginErrors.password }}
+                </p>
+              </div>
 
-            <div class="form-footnote">登录后会同步真实账号信息，未接入扫码前仍可直接登录。</div>
+              <p v-if="loginErrors.submit" class="text-sm font-medium text-rose-500">
+                {{ loginErrors.submit }}
+              </p>
 
-            <el-button type="primary" class="submit-btn" :loading="loading" native-type="submit">
-              登录
-              <el-icon><ArrowRight /></el-icon>
-            </el-button>
-          </el-form>
+              <Button
+                type="submit"
+                class="h-12 w-full rounded-full bg-orange-400 text-lg font-black text-white shadow-[0_16px_36px_-18px_rgba(251,146,60,0.85)] hover:bg-orange-500"
+                :disabled="!canSubmitLogin"
+              >
+                <LoaderCircle v-if="loginLoading" class="h-5 w-5 animate-spin" />
+                登录
+              </Button>
 
-          <el-form
-            v-else
-            ref="registerFormRef"
-            class="auth-form"
-            :model="registerForm"
-            :rules="registerRules"
-            label-position="top"
-            @submit.prevent="handleRegister"
-          >
-            <el-form-item label="学号" prop="studentNo">
-              <el-input v-model="registerForm.studentNo" :prefix-icon="Postcard" placeholder="请输入学号" />
-            </el-form-item>
+              <div class="pt-1 text-center text-sm text-slate-500">
+                没有账号？
+                <button
+                  type="button"
+                  class="font-semibold text-brand-600 transition hover:text-brand-700"
+                  @click="switchToRegister"
+                >
+                  去注册
+                </button>
+              </div>
+            </form>
+          </TabsContent>
 
-            <el-form-item label="密码" prop="password">
-              <el-input
-                v-model="registerForm.password"
-                :prefix-icon="Lock"
-                show-password
-                type="password"
-                placeholder="设置登录密码"
-              />
-            </el-form-item>
+          <TabsContent value="register" class="mt-8 outline-none">
+            <form class="space-y-5" @submit.prevent="handleRegisterSubmit">
+              <div class="space-y-2.5">
+                <Input
+                  v-model="registerForm.studentNo"
+                  type="text"
+                  placeholder="学号，6-20 位字母或数字"
+                  class="h-12 rounded-full border-white bg-slate-100/90 px-5 text-[15px] shadow-none focus:bg-white"
+                  @blur="validateRegisterStudentNo"
+                />
+                <p v-if="registerErrors.studentNo" class="text-sm font-medium text-rose-500">
+                  {{ registerErrors.studentNo }}
+                </p>
+              </div>
 
-            <el-form-item label="昵称">
-              <el-input v-model="registerForm.name" :prefix-icon="User" placeholder="对外展示的昵称" />
-            </el-form-item>
+              <div class="space-y-2.5">
+                <div class="relative">
+                  <Input
+                    v-model="registerForm.password"
+                    :type="showRegisterPassword ? 'text' : 'password'"
+                    placeholder="密码，6-20 位且不能包含空格"
+                    class="h-12 rounded-full border-white bg-slate-100/90 px-5 pr-14 text-[15px] shadow-none focus:bg-white"
+                    @blur="validateRegisterPassword"
+                  />
+                  <button
+                    type="button"
+                    class="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
+                    @click="showRegisterPassword = !showRegisterPassword"
+                  >
+                    <Eye v-if="!showRegisterPassword" class="h-5 w-5" />
+                    <EyeOff v-else class="h-5 w-5" />
+                  </button>
+                </div>
+                <p v-if="registerErrors.password" class="text-sm font-medium text-rose-500">
+                  {{ registerErrors.password }}
+                </p>
+              </div>
 
-            <el-form-item label="手机号" prop="phone">
-              <el-input v-model="registerForm.phone" :prefix-icon="Phone" placeholder="用于接收通知" />
-            </el-form-item>
+              <div class="space-y-2.5">
+                <Input
+                  v-model="registerForm.name"
+                  type="text"
+                  placeholder="昵称，不填则默认使用学号"
+                  class="h-12 rounded-full border-white bg-slate-100/90 px-5 text-[15px] shadow-none focus:bg-white"
+                  @blur="validateRegisterName"
+                />
+                <p v-if="registerErrors.name" class="text-sm font-medium text-rose-500">
+                  {{ registerErrors.name }}
+                </p>
+              </div>
 
-            <div class="form-footnote">注册完成后可继续补充头像、校园和简介，不会影响登录链路。</div>
+              <div class="space-y-2.5">
+                <Input
+                  v-model="registerForm.phone"
+                  type="text"
+                  inputmode="numeric"
+                  placeholder="手机号，选填"
+                  class="h-12 rounded-full border-white bg-slate-100/90 px-5 text-[15px] shadow-none focus:bg-white"
+                  @blur="validateRegisterPhone"
+                />
+                <p v-if="registerErrors.phone" class="text-sm font-medium text-rose-500">
+                  {{ registerErrors.phone }}
+                </p>
+              </div>
 
-            <el-button type="primary" class="submit-btn" :loading="loading" native-type="submit">
-              注册
-              <el-icon><ArrowRight /></el-icon>
-            </el-button>
-          </el-form>
-        </section>
+              <p v-if="registerErrors.submit" class="text-sm font-medium text-rose-500">
+                {{ registerErrors.submit }}
+              </p>
 
-        <aside class="auth-side">
-          <div class="scan-card">
-            <div class="scan-title">{{ sideTitle }}</div>
-            <div class="scan-box" aria-hidden="true">
-              <span class="scan-grid"></span>
-              <strong>二维码占位</strong>
-              <p>{{ sideDescription }}</p>
-            </div>
-          </div>
+              <Button
+                type="submit"
+                class="h-12 w-full rounded-full bg-orange-400 text-lg font-black text-white shadow-[0_16px_36px_-18px_rgba(251,146,60,0.85)] hover:bg-orange-500"
+                :disabled="!canSubmitRegister"
+              >
+                <LoaderCircle v-if="registerLoading" class="h-5 w-5 animate-spin" />
+                注册
+              </Button>
 
-          <div class="note-card">
-            <p class="note-title">接入说明</p>
-            <ul>
-              <li v-for="item in sideSteps" :key="item">{{ item }}</li>
-            </ul>
-          </div>
-        </aside>
+              <div class="pt-1 text-center text-sm text-slate-500">
+                已有账号？
+                <button
+                  type="button"
+                  class="font-semibold text-brand-600 transition hover:text-brand-700"
+                  @click="switchToLogin"
+                >
+                  去登录
+                </button>
+              </div>
+            </form>
+          </TabsContent>
+        </TabsRoot>
+      </DialogContent>
+    </DialogPortal>
+
+    <transition
+      enter-active-class="transition duration-200"
+      enter-from-class="translate-y-2 opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition duration-150"
+      leave-from-class="translate-y-0 opacity-100"
+      leave-to-class="translate-y-2 opacity-0"
+    >
+      <div
+        v-if="toast.visible"
+        class="fixed bottom-6 right-6 z-[140] rounded-2xl px-4 py-3 text-sm font-medium shadow-[0_24px_60px_-28px_rgba(15,23,42,0.35)]"
+        :class="toast.type === 'error' ? 'bg-rose-500 text-white' : 'bg-slate-950 text-white'"
+      >
+        {{ toast.message }}
       </div>
-    </div>
-  </el-dialog>
+    </transition>
+  </DialogRoot>
 </template>
-
-<style scoped>
-:deep(.auth-dialog .el-dialog) {
-  width: min(920px, calc(100vw - 24px));
-  border-radius: 28px;
-  overflow: hidden;
-  background: #fff;
-  border: 1px solid var(--zz-border);
-  box-shadow: 0 28px 70px rgba(34, 34, 34, 0.16);
-}
-
-:deep(.auth-dialog .el-dialog__header) {
-  display: none;
-}
-
-:deep(.auth-dialog .el-dialog__body) {
-  padding: 0;
-}
-
-.auth-shell {
-  padding: 18px;
-  background: #fff;
-}
-
-.auth-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.brand-block {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.brand-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  background: var(--zz-yellow);
-  color: var(--zz-black);
-  font-size: 18px;
-  font-weight: 800;
-}
-
-.brand-copy {
-  display: grid;
-  gap: 2px;
-}
-
-.brand-copy p {
-  font-size: 12px;
-  color: var(--zz-text-light);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.brand-copy strong {
-  font-size: 18px;
-  color: var(--zz-black);
-}
-
-.close-btn {
-  width: 36px;
-  height: 36px;
-  border: 0;
-  border-radius: 12px;
-  background: #f4f4f4;
-  color: var(--zz-text-secondary);
-  cursor: pointer;
-  font-size: 26px;
-  line-height: 1;
-}
-
-.auth-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 292px;
-  gap: 16px;
-}
-
-.auth-form-column,
-.auth-side {
-  border: 1px solid var(--zz-border);
-  border-radius: 24px;
-  background: #fafafa;
-  padding: 20px;
-}
-
-.auth-intro {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.eyebrow {
-  color: var(--zz-text-light);
-  font-size: 12px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  font-weight: 700;
-}
-
-.auth-intro h2 {
-  font-size: 26px;
-  line-height: 1.15;
-  color: var(--zz-black);
-}
-
-.auth-intro p {
-  color: var(--zz-text-secondary);
-  line-height: 1.65;
-  font-size: 14px;
-}
-
-.mode-switch {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.mode-switch button {
-  min-height: 44px;
-  border: 1px solid var(--zz-border);
-  border-radius: 14px;
-  background: #fff;
-  color: var(--zz-text-secondary);
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    border-color 0.18s ease,
-    background-color 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s ease;
-}
-
-.mode-switch button:hover {
-  transform: translateY(-1px);
-}
-
-.mode-switch button.active {
-  border-color: rgba(255, 227, 79, 0.85);
-  background: var(--zz-yellow-soft);
-  color: var(--zz-black);
-}
-
-.auth-form {
-  display: grid;
-  gap: 2px;
-}
-
-.auth-form :deep(.el-form-item) {
-  margin-bottom: 14px;
-}
-
-.auth-form :deep(.el-form-item__label) {
-  color: var(--zz-text);
-  font-weight: 700;
-  padding-bottom: 4px;
-}
-
-.form-footnote {
-  margin-top: -2px;
-  color: var(--zz-text-light);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.submit-btn {
-  width: 100%;
-  margin-top: 6px;
-}
-
-.auth-side {
-  display: grid;
-  gap: 14px;
-  align-content: start;
-}
-
-.scan-card,
-.note-card {
-  border-radius: 20px;
-  border: 1px solid var(--zz-border);
-  background: #fff;
-  padding: 16px;
-}
-
-.scan-title,
-.note-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--zz-black);
-  margin-bottom: 12px;
-}
-
-.scan-box {
-  min-height: 260px;
-  border-radius: 18px;
-  border: 1px dashed #d9d9d9;
-  background: linear-gradient(180deg, #fff 0%, #fbfbfb 100%);
-  display: grid;
-  place-items: center;
-  gap: 10px;
-  text-align: center;
-  padding: 18px;
-}
-
-.scan-grid {
-  width: 120px;
-  height: 120px;
-  border-radius: 24px;
-  background:
-    linear-gradient(90deg, rgba(34, 34, 34, 0.1) 1px, transparent 1px),
-    linear-gradient(rgba(34, 34, 34, 0.1) 1px, transparent 1px);
-  background-size: 12px 12px;
-  box-shadow: inset 0 0 0 10px rgba(255, 227, 79, 0.18);
-}
-
-.scan-box strong {
-  font-size: 16px;
-  color: var(--zz-black);
-}
-
-.scan-box p {
-  max-width: 220px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--zz-text-secondary);
-}
-
-.note-card ul {
-  margin: 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 10px;
-  color: var(--zz-text-secondary);
-  line-height: 1.55;
-  font-size: 13px;
-}
-
-@media (max-width: 860px) {
-  .auth-body {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 640px) {
-  .auth-shell {
-    padding: 14px;
-  }
-
-  .auth-form-column,
-  .auth-side {
-    padding: 16px;
-  }
-
-  .auth-intro h2 {
-    font-size: 22px;
-  }
-}
-</style>

@@ -1,51 +1,13 @@
 <template>
-  <div class="about-page">
-    <section class="about-card">
-      <p class="eyebrow">Campus Resale</p>
-      <h1>让校园里的闲置重新流动起来</h1>
-      <p class="description">
-        转转校园用户端聚焦商品浏览、发布、认证与个人中心等核心流程，设计方向参考电商化二手交易平台，并保留校园场景的轻量感与信任感。
+  <section class="px-4 py-10 sm:px-6 lg:px-8">
+    <div
+      class="mx-auto max-w-[960px] rounded-[28px] border border-white/80 bg-white/95 px-8 py-10 shadow-[0_20px_60px_-32px_rgba(15,23,42,0.28)]"
+    >
+      <p class="text-sm font-semibold uppercase tracking-[0.26em] text-brand-500">About</p>
+      <h1 class="mt-3 text-3xl font-black text-slate-950">校园二手平台</h1>
+      <p class="mt-4 text-base leading-8 text-slate-600">
+        当前页面预留给后续站点介绍或帮助中心内容。
       </p>
-    </section>
-  </div>
+    </div>
+  </section>
 </template>
-
-<style scoped>
-.about-page {
-  display: grid;
-}
-
-.about-card {
-  padding: 36px;
-  border-radius: 32px;
-  background:
-    radial-gradient(circle at top right, rgba(255, 225, 79, 0.6), transparent 30%),
-    linear-gradient(135deg, #fffef7 0%, #fff7d7 100%);
-  border: 1px solid rgba(22, 22, 22, 0.08);
-  box-shadow: 0 18px 40px rgba(22, 22, 22, 0.08);
-}
-
-.eyebrow {
-  margin: 0 0 10px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #8b7b42;
-}
-
-.about-card h1 {
-  margin: 0;
-  color: #161616;
-  font-size: clamp(32px, 5vw, 54px);
-  line-height: 1.08;
-}
-
-.description {
-  max-width: 760px;
-  margin: 18px 0 0;
-  color: #5b5642;
-  font-size: 16px;
-  line-height: 1.8;
-}
-</style>

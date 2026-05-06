@@ -1,897 +1,553 @@
-﻿<script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+<!-- 商品详情 API: GET /api/user/goods/{id}; 核心字段: id, sellerId, sellerName, sellerAvatar, sellerCampus, sellerScoreAvg, sellerReviewCount, categoryId, categoryName, title, detail, price, oldPrice, quality, location, status, statusDesc, cover, viewCount, favoriteCount, publishTime, images[{ url, sort, isCover }] -->
+<script setup>
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import MarketplaceEmptyState from '@/components/MarketplaceEmptyState.vue'
-import MarketplaceProductCard from '@/components/MarketplaceProductCard.vue'
-import { cancelCollectGoods, collectGoods, fetchFavoriteStatus } from '@/api/favorite'
-import { fetchPublicGoodsById, fetchPublicGoodsPage } from '@/api/goods'
-import { getGoodsReviewPage } from '@/api/review'
-import { GOODS_STATUS, GOODS_STATUS_LABEL_MAP } from '@/constants/goods'
-import { useAuthStore } from '@/stores/auth'
-import { formatDateTime } from '@/utils/format'
+import {
+  BadgeCheck,
+  Heart,
+  LoaderCircle,
+  MessageCircle,
+  ShoppingBag,
+  Star,
+} from 'lucide-vue-next'
+import { Avatar } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import request, { AUTH_CHANGED_EVENT, ensureLoggedIn, isLoggedIn } from '@/utils/request'
 
 const route = useRoute()
 const router = useRouter()
-const authStore = useAuthStore()
 
 const loading = ref(false)
-const detail = ref(null)
-const recommendGoods = ref([])
-const activeImageIndex = ref(0)
+const selectedImageIndex = ref(0)
 const favoriteLoading = ref(false)
-const favorited = ref(false)
+const isFavorited = ref(false)
 
-const reviewLoading = ref(false)
-const reviewRecords = ref([])
-const reviewTotal = ref(0)
-const reviewPage = ref(1)
-const reviewPageSize = ref(5)
+const detail = reactive({
+  id: null,
+  sellerId: null,
+  sellerName: '',
+  sellerAvatar: '',
+  sellerCampus: '',
+  sellerScoreAvg: null,
+  sellerReviewCount: 0,
+  categoryId: null,
+  categoryName: '',
+  title: '',
+  detail: '',
+  price: '',
+  oldPrice: '',
+  quality: null,
+  location: '',
+  status: null,
+  statusDesc: '',
+  cover: '',
+  viewCount: 0,
+  favoriteCount: 0,
+  publishTime: '',
+  images: [],
+})
+
+const toast = reactive({
+  visible: false,
+  type: 'success',
+  message: '',
+})
 
 const galleryImages = computed(() => {
-  if (!detail.value) return []
-  const list = []
-  if (detail.value.cover) {
-    list.push(detail.value.cover)
+  const fromImages = Array.isArray(detail.images)
+    ? detail.images
+        .slice()
+        .sort((a, b) => {
+          const coverDiff = Number(b?.isCover || 0) - Number(a?.isCover || 0)
+          if (coverDiff !== 0) {
+            return coverDiff
+          }
+          return Number(a?.sort || 0) - Number(b?.sort || 0)
+        })
+        .map((item) => item?.url)
+        .filter(Boolean)
+        .map((url, index) => ({
+          id: `${url}-${index}`,
+          url,
+        }))
+    : []
+
+  if (fromImages.length) {
+    return fromImages
   }
-  if (Array.isArray(detail.value.images)) {
-    detail.value.images.forEach((item) => {
-      if (typeof item === 'string' && item) list.push(item)
-      if (item?.url) list.push(item.url)
-    })
+
+  if (detail.cover) {
+    return [{ id: `cover-${detail.id || 'default'}`, url: detail.cover }]
   }
-  return [...new Set(list)]
+
+  return []
 })
 
-const currentImage = computed(() => galleryImages.value[activeImageIndex.value] || '')
-const priceText = computed(() => `楼${Number(detail.value?.price || 0).toFixed(2)}`)
-const sellerName = computed(() => detail.value?.sellerName || '校园卖家')
-const detailStatus = computed(() => Number(detail.value?.status))
-const statusText = computed(() => {
-  if (detail.value?.statusDesc) return detail.value.statusDesc
-  return GOODS_STATUS_LABEL_MAP[detailStatus.value] || '未知状态'
+const currentImage = computed(() => galleryImages.value[selectedImageIndex.value]?.url || '')
+const qualityLabel = computed(() => mapQualityLabel(detail.quality))
+const sellerScoreLabel = computed(() => {
+  const score = Number(detail.sellerScoreAvg)
+  if (Number.isNaN(score)) {
+    return '暂无评分'
+  }
+  return score.toFixed(1)
 })
-const canOrder = computed(() => detailStatus.value === GOODS_STATUS.ON_SALE)
-const canFavorite = computed(() => {
-  if (favorited.value) {
-    return true
+const publishTimeLabel = computed(() => formatDateTime(detail.publishTime))
+const detailLines = computed(() =>
+  detail.detail
+    ? detail.detail.split(/\r?\n/).filter((line) => line.trim())
+    : ['卖家暂未补充更多描述。'],
+)
+const isOnSale = computed(() => Number(detail.status) === 3)
+const isSold = computed(() => Number(detail.status) === 5)
+const buyButtonText = computed(() => {
+  if (isSold.value) {
+    return '已卖掉'
   }
-  return detailStatus.value === GOODS_STATUS.ON_SALE || detailStatus.value === GOODS_STATUS.LOCKED
+
+  if (!isOnSale.value) {
+    return detail.statusDesc || '暂不可买'
+  }
+
+  return '立即购买'
 })
 
-const sellingTags = computed(() => {
-  const tags = []
-  if (detail.value?.categoryName) tags.push(detail.value.categoryName)
-  if (detail.value?.quality) tags.push(`成色 ${detail.value.quality}`)
-  if (detail.value?.location) tags.push(detail.value.location)
-  if (detail.value?.createTime) tags.push(formatDateTime(detail.value.createTime))
-  return tags
-})
+function showToast(message, type = 'success') {
+  toast.visible = true
+  toast.type = type
+  toast.message = message
 
-function goBack() {
-  router.push('/goods')
+  window.clearTimeout(showToast.timer)
+  showToast.timer = window.setTimeout(() => {
+    toast.visible = false
+  }, 2600)
 }
 
-function goOrderDraft() {
-  if (!detail.value?.id) return
-  if (!canOrder.value) {
-    ElMessage.warning(`当前商品状态为${statusText.value}，不可下单`)
-    return
-  }
-  router.push({
-    path: '/order/create',
-    query: {
-      goodsId: String(detail.value.id),
-      goodsTitle: detail.value.title || '',
-      goodsCover: detail.value.cover || '',
-      amount: String(detail.value.price || ''),
-      sellerName: sellerName.value,
-      location: detail.value.location || '',
-    },
-  })
+function getErrorMessage(error, fallback) {
+  return error?.response?.data?.msg || error?.message || fallback
 }
 
-function goToLogin() {
-  router.push({
-    name: 'login',
-    query: {
-      redirect: route.fullPath,
-    },
-  })
-}
-
-async function loadFavoriteStatus(goodsId) {
-  if (!goodsId || !authStore.isLoggedIn) {
-    favorited.value = false
-    return
+function mapQualityLabel(value) {
+  const qualityMap = {
+    1: '明显使用痕迹',
+    2: '成色一般',
+    3: '成色不错',
+    4: '成色很好',
+    5: '几乎全新',
   }
 
-  try {
-    const data = await fetchFavoriteStatus(goodsId)
-    favorited.value = Boolean(data?.favorited)
-  } catch {
-    favorited.value = false
-  }
+  return qualityMap[value] || '成色未知'
 }
 
-async function toggleFavorite() {
-  const goodsId = detail.value?.id
-  if (!goodsId || favoriteLoading.value) {
-    return
+function formatPrice(value) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) {
+    return '0.00'
   }
 
-  if (!authStore.isLoggedIn) {
-    goToLogin()
-    return
+  return amount % 1 === 0 ? String(amount) : amount.toFixed(2)
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return '刚刚发布'
   }
 
-  if (!canFavorite.value) {
-    ElMessage.warning('当前商品状态不支持收藏')
-    return
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '刚刚发布'
   }
 
-  favoriteLoading.value = true
-  try {
-    const result = favorited.value ? await cancelCollectGoods(goodsId) : await collectGoods(goodsId)
-    favorited.value = Boolean(result?.favorited)
-
-    const backendCount = Number(result?.favoriteCount)
-    if (detail.value && Number.isFinite(backendCount)) {
-      detail.value.favoriteCount = backendCount
-    }
-
-    ElMessage.success(favorited.value ? '收藏成功' : '已取消收藏')
-  } catch (error) {
-    ElMessage.error(error.message || '收藏操作失败')
-  } finally {
-    favoriteLoading.value = false
-  }
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
 }
 
-function goDetail(item) {
-  if (!item?.id) return
-  router.push(`/goods/${item.id}`)
+function applyDetail(data = {}) {
+  detail.id = data.id ?? null
+  detail.sellerId = data.sellerId ?? null
+  detail.sellerName = data.sellerName ?? ''
+  detail.sellerAvatar = data.sellerAvatar ?? ''
+  detail.sellerCampus = data.sellerCampus ?? ''
+  detail.sellerScoreAvg = data.sellerScoreAvg ?? null
+  detail.sellerReviewCount = data.sellerReviewCount ?? 0
+  detail.categoryId = data.categoryId ?? null
+  detail.categoryName = data.categoryName ?? ''
+  detail.title = data.title ?? ''
+  detail.detail = data.detail ?? ''
+  detail.price = data.price ?? ''
+  detail.oldPrice = data.oldPrice ?? ''
+  detail.quality = data.quality ?? null
+  detail.location = data.location ?? ''
+  detail.status = data.status ?? null
+  detail.statusDesc = data.statusDesc ?? ''
+  detail.cover = data.cover ?? ''
+  detail.viewCount = data.viewCount ?? 0
+  detail.favoriteCount = data.favoriteCount ?? 0
+  detail.publishTime = data.publishTime ?? ''
+  detail.images = Array.isArray(data.images) ? data.images : []
 }
 
-function goSellerSpace() {
-  if (!detail.value?.sellerId) return
-  router.push({
-    name: 'seller-space',
-    params: {
-      sellerId: String(detail.value.sellerId),
-    },
-    query: {
-      name: detail.value.sellerName || '',
-      avatar: detail.value.sellerAvatar || '',
-      campus: detail.value.sellerCampus || '',
-      scoreAvg: String(detail.value.sellerScoreAvg ?? ''),
-      reviewCount: String(detail.value.sellerReviewCount ?? ''),
-    },
-  })
-}
-
-function parseImageUrls(images) {
-  if (!images) return []
-  return String(images)
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function getReviewImages(review) {
-  return parseImageUrls(review?.images)
-}
-
-function getReviewerName(review) {
-  if (review?.reviewerName) return review.reviewerName
-  return review?.anonymous === 1 ? '匿名用户' : '用户'
-}
-
-function reviewLevelText(score) {
-  const value = Number(score || 0)
-  if (value >= 5) return '好评'
-  if (value >= 3) return '中评'
-  return '差评'
-}
-
-function reviewLevelClass(score) {
-  const value = Number(score || 0)
-  if (value >= 5) return 'level-good'
-  if (value >= 3) return 'level-neutral'
-  return 'level-bad'
-}
-
-async function loadRecommend(categoryId, currentId) {
-  try {
-    const data = await fetchPublicGoodsPage({
-      page: 1,
-      pageSize: 8,
-      sortBy: 'hot',
-      ...(categoryId ? { categoryId } : {}),
-    })
-    recommendGoods.value = (data?.records || []).filter((item) => String(item.id) !== String(currentId)).slice(0, 5)
-  } catch {
-    recommendGoods.value = []
-  }
-}
-
-async function loadReviews(goodsId) {
+async function fetchDetail() {
+  const goodsId = route.params.id
   if (!goodsId) {
-    reviewRecords.value = []
-    reviewTotal.value = 0
-    return
-  }
-
-  reviewLoading.value = true
-  try {
-    const data = await getGoodsReviewPage(goodsId, {
-      page: reviewPage.value,
-      pageSize: reviewPageSize.value,
-    })
-    reviewRecords.value = data?.records || []
-    reviewTotal.value = Number(data?.total || 0)
-  } catch (error) {
-    reviewRecords.value = []
-    reviewTotal.value = 0
-    ElMessage.error(error.message || '评价加载失败')
-  } finally {
-    reviewLoading.value = false
-  }
-}
-
-async function onReviewPageChange(nextPage) {
-  reviewPage.value = nextPage
-  await loadReviews(detail.value?.id)
-}
-
-async function loadDetail() {
-  const id = Number(route.params.id)
-  if (!Number.isFinite(id) || id <= 0) {
-    router.replace('/goods')
+    router.replace('/')
     return
   }
 
   loading.value = true
+
   try {
-    detail.value = await fetchPublicGoodsById(id)
-    activeImageIndex.value = 0
-    reviewPage.value = 1
-    await Promise.all([
-      loadRecommend(detail.value?.categoryId, id),
-      loadReviews(id),
-      loadFavoriteStatus(id),
-    ])
+    const { data } = await request.get(`/user/goods/${goodsId}`)
+
+    if (data?.code !== 1 || !data?.data) {
+      throw new Error(data?.msg || '商品详情加载失败')
+    }
+
+    applyDetail(data.data)
+    selectedImageIndex.value = 0
+    await syncFavoriteStatus()
   } catch (error) {
-    detail.value = null
-    recommendGoods.value = []
-    reviewRecords.value = []
-    reviewTotal.value = 0
-    favorited.value = false
-    ElMessage.error(error.message || '商品详情加载失败')
+    showToast(getErrorMessage(error, '商品详情加载失败'), 'error')
   } finally {
     loading.value = false
   }
 }
 
+async function syncFavoriteStatus() {
+  if (!detail.id || !isLoggedIn()) {
+    isFavorited.value = false
+    return
+  }
+
+  try {
+    const { data } = await request.get(`/user/favorites/${detail.id}/status`, {
+      skipAuthRedirect: true,
+    })
+
+    if (data?.code !== 1) {
+      throw new Error(data?.msg || '收藏状态加载失败')
+    }
+
+    isFavorited.value = Boolean(data.data?.favorited)
+  } catch (error) {
+    isFavorited.value = false
+    if (error?.response?.status !== 401) {
+      showToast(getErrorMessage(error, '收藏状态加载失败'), 'error')
+    }
+  }
+}
+
+function selectImage(index) {
+  selectedImageIndex.value = index
+}
+
+function openSellerSpace() {
+  if (!detail.sellerId) {
+    return
+  }
+
+  router.push(`/seller/${detail.sellerId}`)
+}
+
+function handleChat() {
+  if (!ensureLoggedIn({ source: 'goods-detail-chat' })) {
+    return
+  }
+  showToast('聊天功能开发中')
+}
+
+function handleBuyNow() {
+  if (!ensureLoggedIn({ source: 'goods-detail-buy' })) {
+    return
+  }
+  if (!isOnSale.value) {
+    showToast(isSold.value ? '商品已卖掉' : detail.statusDesc || '当前商品暂不可购买', 'error')
+    return
+  }
+  if (!detail.id) {
+    return
+  }
+  router.push(`/checkout/${detail.id}`)
+}
+
+function handleFavorite() {
+  if (!ensureLoggedIn({ source: 'goods-detail-favorite' })) {
+    return
+  }
+  if (!detail.id || favoriteLoading.value) {
+    return
+  }
+
+  window.clearTimeout(handleFavorite.timer)
+  handleFavorite.timer = window.setTimeout(async () => {
+    favoriteLoading.value = true
+
+    try {
+      const method = isFavorited.value ? 'delete' : 'post'
+      const actionText = isFavorited.value ? '取消收藏' : '收藏'
+      const { data } = await request[method](`/user/favorites/${detail.id}`)
+
+      if (data?.code !== 1) {
+        throw new Error(data?.msg || `${actionText}失败`)
+      }
+
+      isFavorited.value = Boolean(data.data?.favorited)
+      detail.favoriteCount = Number(data.data?.favoriteCount ?? detail.favoriteCount ?? 0)
+      showToast(isFavorited.value ? '已收藏' : '已取消收藏')
+    } catch (error) {
+      showToast(getErrorMessage(error, isFavorited.value ? '取消收藏失败' : '收藏失败'), 'error')
+    } finally {
+      favoriteLoading.value = false
+    }
+  }, 180)
+}
+
+function handleAuthChanged() {
+  syncFavoriteStatus()
+}
+
 watch(
   () => route.params.id,
   () => {
-    loadDetail()
+    fetchDetail()
   },
 )
 
-watch(
-  () => authStore.isLoggedIn,
-  () => {
-    loadFavoriteStatus(detail.value?.id)
-  },
-)
+onMounted(() => {
+  fetchDetail()
+  window.addEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
+})
 
-onMounted(loadDetail)
+onBeforeUnmount(() => {
+  window.clearTimeout(showToast.timer)
+  window.clearTimeout(handleFavorite.timer)
+  window.removeEventListener(AUTH_CHANGED_EVENT, handleAuthChanged)
+})
 </script>
 
 <template>
-  <div class="detail-page zz-page">
-    <MarketplaceEmptyState
-      v-if="!loading && !detail"
-      title="商品不存在"
-      description="当前商品详情无法展示，可能已下架或被删除。"
-      action-text="返回商品广场"
-      @action="goBack"
-    />
-
-    <template v-else-if="detail">
-      <section class="seller-banner zz-white-panel">
-        <div class="seller-banner__main">
-          <button type="button" class="seller-avatar-btn" @click="goSellerSpace">
-            <el-avatar :size="62" :src="detail.sellerAvatar || undefined">{{ sellerName.slice(0, 1) }}</el-avatar>
-          </button>
-          <div class="seller-copy">
-            <h2>{{ sellerName }}</h2>
-            <p>{{ detail.location || '校内当面交易' }} · 商品状态：{{ statusText }}</p>
-            <p class="seller-score">
-              卖家评分 {{ Number(detail.sellerScoreAvg || 0).toFixed(1) }} 分（{{ Number(detail.sellerReviewCount || 0) }} 条评价）
-            </p>
+  <section class="bg-slate-50 px-4 pb-10 pt-4 sm:px-6 lg:px-8">
+    <div class="mx-auto flex max-w-[1480px] flex-col gap-4">
+      <Card class="border border-slate-200/80 bg-white px-4 py-2 shadow-sm sm:px-5">
+        <div v-if="loading" class="flex min-h-16 items-center justify-center">
+          <div
+            class="inline-flex items-center gap-3 rounded-full bg-slate-100 px-5 py-2.5 text-sm font-medium text-slate-500"
+          >
+            <LoaderCircle class="h-4 w-4 animate-spin" />
+            正在加载卖家信息
           </div>
         </div>
-        <div class="seller-banner__actions">
-          <el-button @click="goSellerSpace">查看卖家空间</el-button>
-          <el-button plain @click="goBack">返回列表</el-button>
-        </div>
-      </section>
 
-      <section class="detail-main zz-white-panel">
-        <div class="gallery-panel">
-          <div class="gallery-main">
-            <img v-if="currentImage" :src="currentImage" :alt="detail.title" />
-            <div v-else class="gallery-empty">暂无图片</div>
+        <button
+          v-else
+          type="button"
+          class="flex w-full items-center justify-between gap-4 rounded-[20px] border border-transparent bg-transparent px-3 py-2 text-left transition hover:border-slate-200 hover:bg-white"
+          @click="openSellerSpace"
+        >
+          <div class="flex min-w-0 items-center gap-3">
+            <Avatar
+              size="lg"
+              :src="detail.sellerAvatar"
+              :fallback="detail.sellerName?.slice(0, 1) || '卖'"
+            />
+            <div class="min-w-0 space-y-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="truncate text-base font-black text-slate-950">
+                  {{ detail.sellerName || '校园卖家' }}
+                </p>
+                <Badge variant="success">
+                  <BadgeCheck class="mr-1 h-3.5 w-3.5" />
+                  信用 {{ sellerScoreLabel }}
+                </Badge>
+              </div>
+              <div class="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                <span>{{ detail.sellerCampus || '校园内卖家' }}</span>
+                <span>累计评价 {{ detail.sellerReviewCount || 0 }}</span>
+              </div>
+            </div>
           </div>
 
-          <div class="gallery-thumbs">
-            <button
-              v-for="(item, index) in galleryImages"
-              :key="`${item}-${index}`"
-              type="button"
-              class="thumb-item"
-              :class="{ 'is-active': activeImageIndex === index }"
-              @click="activeImageIndex = index"
+          <Badge variant="outline">卖家主页</Badge>
+        </button>
+      </Card>
+
+      <Card class="border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
+        <div v-if="loading" class="flex min-h-[560px] items-center justify-center">
+          <div
+            class="inline-flex items-center gap-3 rounded-full bg-slate-100 px-5 py-2.5 text-sm font-medium text-slate-500"
+          >
+            <LoaderCircle class="h-4 w-4 animate-spin" />
+            正在加载商品详情
+          </div>
+        </div>
+
+        <div v-else class="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_420px]">
+          <div class="grid gap-4 lg:grid-cols-[84px_minmax(0,1fr)]">
+            <div
+              class="flex max-h-[560px] gap-3 overflow-x-auto lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto lg:pr-1"
             >
-              <img :src="item" alt="缩略图" />
-            </button>
-          </div>
-        </div>
+              <button
+                v-for="(image, index) in galleryImages"
+                :key="image.id"
+                type="button"
+                class="h-[74px] w-[74px] shrink-0 overflow-hidden rounded-2xl border bg-slate-50 transition"
+                :class="
+                  selectedImageIndex === index
+                    ? 'border-brand-400 shadow-[0_14px_30px_-18px_rgba(249,115,22,0.85)]'
+                    : 'border-slate-200 hover:border-slate-300'
+                "
+                @click="selectImage(index)"
+              >
+                <img :src="image.url" :alt="detail.title" class="h-full w-full object-cover" />
+              </button>
+            </div>
 
-        <aside class="summary-panel">
-          <h1>{{ detail.title }}</h1>
-          <div class="price-block">
-            <strong>{{ priceText }}</strong>
-            <span>校内交易，支持当面验货</span>
-          </div>
-
-          <div class="tag-row">
-            <span v-for="tag in sellingTags" :key="tag" class="selling-tag">{{ tag }}</span>
-          </div>
-
-          <div class="desc-box">
-            <h3>商品描述</h3>
-            <p>{{ detail.detail || '卖家暂未补充详细描述。' }}</p>
-          </div>
-
-          <div class="meta-grid">
-            <article>
-              <span>浏览量</span>
-              <strong>{{ detail.viewCount || 0 }}</strong>
-            </article>
-            <article>
-              <span>收藏量</span>
-              <strong>{{ detail.favoriteCount || 0 }}</strong>
-            </article>
-            <article>
-              <span>分类</span>
-              <strong>{{ detail.categoryName || '未分类' }}</strong>
-            </article>
-            <article>
-              <span>成色</span>
-              <strong>{{ detail.quality || '未填写' }}</strong>
-            </article>
-          </div>
-
-          <div class="action-row">
-            <el-button type="primary" :disabled="!canOrder" @click="goOrderDraft">
-              {{ canOrder ? '立即下单' : '当前不可下单' }}
-            </el-button>
-            <el-button
-              plain
-              class="favorite-btn"
-              :class="{ active: favorited }"
-              :disabled="favoriteLoading || (authStore.isLoggedIn && !canFavorite)"
-              @click="toggleFavorite"
+            <div
+              class="relative flex min-h-[560px] items-center justify-center overflow-hidden rounded-[28px] bg-slate-50"
             >
-              <span class="favorite-icon">{{ favorited ? '♥' : '♡' }}</span>
-              <span>{{ favorited ? '已收藏' : '收藏' }}</span>
-            </el-button>
-            <el-button plain @click="router.push('/favorites')">我的收藏</el-button>
-            <el-button plain @click="router.push('/history')">浏览历史</el-button>
-            <el-button plain @click="router.push('/my-order')">查看订单中心</el-button>
+              <img
+                v-if="currentImage"
+                :src="currentImage"
+                :alt="detail.title"
+                class="h-full max-h-[560px] w-full object-contain"
+              />
+              <div v-else class="text-sm text-slate-400">暂无图片</div>
+              <div v-if="isSold" class="absolute inset-0 bg-slate-950/20" />
+              <div v-if="isSold" class="absolute inset-0 flex items-center justify-center">
+                <div
+                  class="-rotate-12 rounded-full border-4 border-white/90 px-9 py-4 text-3xl font-black tracking-[0.18em] text-white shadow-[0_14px_40px_-18px_rgba(15,23,42,0.5)]"
+                >
+                  卖掉了
+                </div>
+              </div>
+            </div>
           </div>
-          <p v-if="!canOrder" class="order-tip">仅在售商品可下单，当前商品状态：{{ statusText }}</p>
-          <p v-if="!authStore.isLoggedIn" class="favorite-tip">登录后可实时收藏商品</p>
-        </aside>
-      </section>
 
-      <section class="review-panel zz-white-panel">
-        <div class="section-head">
-          <div>
-            <h2>商品评价</h2>
-            <p>仅展示已完成订单买家的真实评价。1-2 分为差评，3-4 分为中评，5 分为好评。</p>
-          </div>
-        </div>
+          <div class="flex min-h-[560px] flex-col rounded-[28px] bg-white p-1">
+            <div class="space-y-4">
+              <div class="space-y-3">
+                <div class="flex items-start justify-between gap-4">
+                  <div class="space-y-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <p class="text-4xl font-black tracking-tight text-brand-500">
+                        ¥{{ formatPrice(detail.price) }}
+                      </p>
+                      <p v-if="detail.oldPrice" class="text-base text-slate-400 line-through">
+                        ¥{{ formatPrice(detail.oldPrice) }}
+                      </p>
+                    </div>
+                  </div>
 
-        <div v-loading="reviewLoading" class="review-wrap">
-          <div v-if="reviewRecords.length" class="review-list">
-            <article v-for="item in reviewRecords" :key="item.id" class="review-item">
-              <div class="review-head">
-                <div class="review-user">
-                  <el-avatar :size="40" :src="item.reviewerAvatar">{{ getReviewerName(item).slice(0, 1) }}</el-avatar>
-                  <div class="review-user-copy">
-                    <strong>{{ getReviewerName(item) }}</strong>
-                    <span>{{ formatDateTime(item.createTime) }}</span>
+                  <div class="shrink-0 text-right">
+                    <p class="text-sm font-semibold text-slate-900">{{ qualityLabel }}</p>
+                    <p class="mt-2 text-sm text-slate-400">
+                      {{ detail.favoriteCount || 0 }}人收藏 | {{ detail.viewCount || 0 }}浏览
+                    </p>
                   </div>
                 </div>
-                <div class="review-score">
-                  <el-rate :model-value="Number(item.score || 0)" disabled text-color="#ff9900" />
-                  <span class="review-level" :class="reviewLevelClass(item.score)">
-                    {{ reviewLevelText(item.score) }}
-                  </span>
+              </div>
+
+              <div class="space-y-2">
+                <h1 class="text-[22px] font-bold leading-snug text-slate-950">
+                  {{ detail.title || '未命名商品' }}
+                </h1>
+                <div class="text-sm leading-6 text-slate-600">
+                  <p
+                    v-for="(line, index) in detailLines"
+                    :key="`${line}-${index}`"
+                    class="whitespace-pre-wrap"
+                  >
+                    {{ line }}
+                  </p>
                 </div>
               </div>
 
-              <p class="review-content" :class="{ empty: !item.content }">
-                {{ item.content || '该用户未填写文字评价。' }}
-              </p>
-
-              <div v-if="getReviewImages(item).length" class="review-images">
-                <el-image
-                  v-for="(url, index) in getReviewImages(item)"
-                  :key="`${item.id}-${url}-${index}`"
-                  :src="url"
-                  :preview-src-list="getReviewImages(item)"
-                  :initial-index="index"
-                  fit="cover"
-                  preview-teleported
-                  class="review-thumb"
-                />
+              <div
+                class="grid gap-3 rounded-[24px] border border-slate-100 bg-white p-4 text-sm text-slate-500"
+              >
+                <div class="flex items-center justify-between gap-4">
+                  <span>面交地点</span>
+                  <span class="font-medium text-slate-700">{{ detail.location || '校园面交' }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <span>发布时间</span>
+                  <span class="font-medium text-slate-700">{{ publishTimeLabel }}</span>
+                </div>
               </div>
-            </article>
+
+              <div class="flex items-center gap-3">
+                <div class="grid min-w-0 flex-1 grid-cols-2 overflow-hidden rounded-full">
+                  <button
+                    type="button"
+                    class="flex h-12 items-center justify-center gap-2 bg-[#ffe55c] px-4 text-base font-bold text-slate-900 transition hover:bg-[#ffdf40]"
+                    @click="handleChat"
+                  >
+                    <MessageCircle class="h-4 w-4" />
+                    聊一聊
+                  </button>
+                  <button
+                    type="button"
+                    class="flex h-12 items-center justify-center gap-2 px-4 text-base font-bold text-white transition"
+                    :class="
+                      isOnSale
+                        ? 'bg-slate-800 hover:bg-slate-700'
+                        : 'cursor-not-allowed bg-slate-300 text-slate-500'
+                    "
+                    :disabled="!isOnSale"
+                    @click="handleBuyNow"
+                  >
+                    <ShoppingBag class="h-4 w-4" />
+                    {{ buyButtonText }}
+                  </button>
+                </div>
+
+                <Button
+                  :variant="isFavorited ? 'default' : 'outline'"
+                  size="lg"
+                  class="h-12 shrink-0 justify-center rounded-full px-6 text-base font-bold"
+                  :class="
+                    isFavorited
+                      ? 'border border-brand-500 bg-brand-500 text-white hover:bg-brand-600'
+                      : 'border border-slate-200 bg-white text-slate-700 hover:border-brand-200 hover:text-brand-600'
+                  "
+                  :disabled="favoriteLoading"
+                  @click="handleFavorite"
+                >
+                  <Heart class="h-4 w-4" :class="isFavorited ? 'fill-current' : ''" />
+                  {{ favoriteLoading ? '处理中' : isFavorited ? '已收藏' : '收藏' }}
+                </Button>
+              </div>
+            </div>
           </div>
-
-          <MarketplaceEmptyState
-            v-else
-            title="暂无评价"
-            description="当前商品还没有评价记录，完成交易后买家可提交评价。"
-          />
         </div>
+      </Card>
+    </div>
 
-        <el-pagination
-          v-if="reviewTotal > reviewPageSize"
-          class="review-pager"
-          background
-          layout="prev, pager, next"
-          :current-page="reviewPage"
-          :page-size="reviewPageSize"
-          :total="reviewTotal"
-          @current-change="onReviewPageChange"
-        />
-      </section>
-
-      <section class="recommend-panel zz-white-panel">
-        <div class="section-head">
-          <div>
-            <h2>为你推荐</h2>
-            <p>同类商品继续逛，看看还有没有更合适的选择。</p>
-          </div>
-        </div>
-
-        <div v-if="recommendGoods.length" class="recommend-grid">
-          <MarketplaceProductCard
-            v-for="item in recommendGoods"
-            :key="item.id"
-            :item="item"
-            compact
-            @click="goDetail"
-          />
-        </div>
-
-        <MarketplaceEmptyState
-          v-else
-          title="暂无推荐商品"
-          description="当前分类下的其他商品暂时不多，稍后再来看看。"
-        />
-      </section>
-    </template>
-  </div>
+    <transition
+      enter-active-class="transition duration-200"
+      enter-from-class="translate-y-2 opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition duration-150"
+      leave-from-class="translate-y-0 opacity-100"
+      leave-to-class="translate-y-2 opacity-0"
+    >
+      <div
+        v-if="toast.visible"
+        class="fixed bottom-6 right-6 z-[140] rounded-2xl px-4 py-3 text-sm font-medium shadow-[0_24px_60px_-28px_rgba(15,23,42,0.35)]"
+        :class="toast.type === 'error' ? 'bg-rose-500 text-white' : 'bg-slate-950 text-white'"
+      >
+        <span class="inline-flex items-center gap-2">
+          <Star v-if="toast.type !== 'error'" class="h-4 w-4" />
+          {{ toast.message }}
+        </span>
+      </div>
+    </transition>
+  </section>
 </template>
-
-<style scoped>
-.seller-banner,
-.detail-main,
-.review-panel,
-.recommend-panel {
-  padding: 18px;
-}
-
-.seller-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.seller-banner__main {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.seller-avatar-btn {
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  cursor: pointer;
-}
-
-.seller-avatar-btn:hover {
-  transform: translateY(-1px);
-}
-
-.seller-copy h2 {
-  font-size: 30px;
-  color: var(--zz-black);
-}
-
-.seller-copy p {
-  margin-top: 6px;
-  color: var(--zz-text-secondary);
-}
-
-.seller-copy .seller-score {
-  color: #5f6f7c;
-}
-
-.detail-main {
-  display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  gap: 22px;
-}
-
-.gallery-panel {
-  display: grid;
-  gap: 14px;
-}
-
-.gallery-main {
-  border-radius: 24px;
-  overflow: hidden;
-  background: #f7f7f7;
-  aspect-ratio: 1 / 1;
-}
-
-.gallery-main img,
-.gallery-empty {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.gallery-empty {
-  display: grid;
-  place-items: center;
-  color: var(--zz-text-light);
-}
-
-.gallery-thumbs {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.thumb-item {
-  padding: 0;
-  border: 2px solid transparent;
-  border-radius: 16px;
-  overflow: hidden;
-  background: #f7f7f7;
-  cursor: pointer;
-}
-
-.thumb-item.is-active {
-  border-color: var(--zz-yellow);
-}
-
-.thumb-item img {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
-}
-
-.summary-panel {
-  display: grid;
-  align-content: start;
-  gap: 16px;
-}
-
-.summary-panel h1 {
-  font-size: clamp(30px, 3vw, 42px);
-  line-height: 1.15;
-  color: var(--zz-black);
-}
-
-.price-block {
-  padding: 18px 20px;
-  border-radius: 22px;
-  background: #fff7da;
-  display: grid;
-  gap: 8px;
-}
-
-.price-block strong {
-  font-size: 44px;
-  line-height: 1;
-  color: #ff5a26;
-}
-
-.price-block span {
-  color: var(--zz-text-secondary);
-}
-
-.tag-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.selling-tag {
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: #f5f5f5;
-  color: var(--zz-text);
-  font-size: 14px;
-}
-
-.desc-box {
-  padding: 18px;
-  border: 1px solid var(--zz-border);
-  border-radius: 22px;
-  background: #fff;
-  display: grid;
-  gap: 10px;
-}
-
-.desc-box h3 {
-  font-size: 20px;
-}
-
-.desc-box p {
-  color: var(--zz-text-secondary);
-  line-height: 1.8;
-  white-space: pre-wrap;
-}
-
-.meta-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.meta-grid article {
-  padding: 16px;
-  border-radius: 20px;
-  background: #fafafa;
-  border: 1px solid var(--zz-border);
-}
-
-.meta-grid span {
-  display: block;
-  color: var(--zz-text-light);
-  font-size: 13px;
-}
-
-.meta-grid strong {
-  display: block;
-  margin-top: 8px;
-  color: var(--zz-black);
-  font-size: 20px;
-}
-
-.action-row {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.favorite-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.favorite-btn.active {
-  color: #e25b73;
-  border-color: #f3a9b8;
-  background: #fff3f6;
-}
-
-.favorite-icon {
-  font-size: 16px;
-  line-height: 1;
-}
-
-.order-tip {
-  margin: -4px 0 0;
-  color: #d14444;
-  font-size: 13px;
-}
-
-.favorite-tip {
-  margin: -8px 0 0;
-  color: var(--zz-text-light);
-  font-size: 13px;
-}
-
-.section-head h2 {
-  font-size: 28px;
-}
-
-.section-head p {
-  margin-top: 6px;
-  color: var(--zz-text-secondary);
-}
-
-.review-wrap {
-  margin-top: 18px;
-}
-
-.review-list {
-  display: grid;
-  gap: 14px;
-}
-
-.review-item {
-  padding: 16px;
-  border: 1px solid var(--zz-border);
-  border-radius: 18px;
-  background: #fafafa;
-  display: grid;
-  gap: 10px;
-}
-
-.review-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.review-score {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.review-user {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.review-user-copy {
-  display: grid;
-  gap: 4px;
-}
-
-.review-user-copy strong {
-  color: var(--zz-black);
-  font-size: 15px;
-}
-
-.review-user-copy span {
-  font-size: 12px;
-  color: var(--zz-text-light);
-}
-
-.review-level {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.review-level.level-good {
-  color: #1f9f59;
-  background: #e9f8ef;
-}
-
-.review-level.level-neutral {
-  color: #d07f21;
-  background: #fff3e3;
-}
-
-.review-level.level-bad {
-  color: #d14444;
-  background: #ffeaea;
-}
-
-.review-content {
-  margin: 0;
-  color: var(--zz-text);
-  line-height: 1.75;
-  white-space: pre-wrap;
-}
-
-.review-content.empty {
-  color: var(--zz-text-light);
-}
-
-.review-images {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.review-thumb {
-  width: 88px;
-  height: 88px;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid var(--zz-border);
-}
-
-.review-thumb :deep(.el-image__inner) {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  cursor: zoom-in;
-}
-
-.review-pager {
-  margin-top: 16px;
-  justify-content: flex-end;
-}
-
-.recommend-grid {
-  margin-top: 18px;
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 16px;
-}
-
-@media (max-width: 1320px) {
-  .recommend-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 980px) {
-  .detail-main {
-    grid-template-columns: 1fr;
-  }
-
-  .review-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .review-score {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .recommend-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 680px) {
-  .seller-banner {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .gallery-thumbs {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .meta-grid,
-  .recommend-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .review-pager {
-    justify-content: center;
-  }
-}
-</style>

@@ -1,14 +1,32 @@
 import request from '@/utils/request'
 
+function unwrapResponse(response) {
+  const payload = response?.data ?? response
+
+  if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'code')) {
+    if (Number(payload.code) === 1) {
+      return payload.data
+    }
+
+    throw new Error(payload.msg || payload.message || '订单请求失败')
+  }
+
+  return payload
+}
+
+function orderRequest(config) {
+  return request(config).then(unwrapResponse)
+}
+
 export function getGoodsById(id) {
-  return request({
+  return orderRequest({
     url: `/user/goods/${id}`,
     method: 'get',
   })
 }
 
 export function submitOrder(data) {
-  return request({
+  return orderRequest({
     url: '/user/order/submit',
     method: 'post',
     data,
@@ -16,7 +34,7 @@ export function submitOrder(data) {
 }
 
 export function getOrderPage(params) {
-  return request({
+  return orderRequest({
     url: '/user/order/page',
     method: 'get',
     params,
@@ -24,28 +42,28 @@ export function getOrderPage(params) {
 }
 
 export function getOrderDetail(id) {
-  return request({
+  return orderRequest({
     url: `/user/order/detail/${id}`,
     method: 'get',
   })
 }
 
 export function cancelOrder(id) {
-  return request({
+  return orderRequest({
     url: `/user/order/cancel/${id}`,
     method: 'post',
   })
 }
 
 export function completeOrder(id) {
-  return request({
+  return orderRequest({
     url: `/user/order/complete/${id}`,
     method: 'post',
   })
 }
 
 export function mockPay(data) {
-  return request({
+  return orderRequest({
     url: '/user/pay/mock',
     method: 'post',
     data,

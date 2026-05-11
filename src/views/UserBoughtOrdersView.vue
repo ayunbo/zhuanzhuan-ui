@@ -385,12 +385,17 @@ function deleteOrder(order) {
 }
 
 function handleEvaluate(order) {
-  if (!order?.goodsId) {
-    showToast('评价功能开发中')
+  if (!order?.id) {
+    showToast('订单信息缺失，暂时无法评价', 'error')
     return
   }
 
-  showToast('评价功能开发中')
+  router.push({
+    path: '/order/review',
+    query: {
+      orderId: String(order.id),
+    },
+  })
 }
 
 function getPrimaryAction(order) {

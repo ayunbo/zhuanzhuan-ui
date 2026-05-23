@@ -21,7 +21,10 @@ const navGroups = computed(() => [
   },
   {
     title: null,
-    items: [{ label: '我的收藏', to: '/user/favorites' }],
+    items: [
+      { label: '我的收藏', to: '/user/favorites' },
+      { label: '我的举报', to: '/user/reports' },
+    ],
   },
   {
     title: '账户设置',

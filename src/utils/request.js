@@ -41,10 +41,19 @@ export function setAuthSession(loginData) {
     return
   }
 
+  const nextToken = String(loginData.token)
+  const nextUserPayload = JSON.stringify(loginData)
+  const currentToken = window.localStorage.getItem(AUTH_TOKEN_KEY) || ''
+  const currentUserPayload = window.localStorage.getItem(AUTH_USER_KEY) || ''
+  const sessionChanged = currentToken !== nextToken || currentUserPayload !== nextUserPayload
+
   unauthorizedDialogOpened = false
-  window.localStorage.setItem(AUTH_TOKEN_KEY, loginData.token)
-  window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(loginData))
-  notifyAuthChanged()
+  window.localStorage.setItem(AUTH_TOKEN_KEY, nextToken)
+  window.localStorage.setItem(AUTH_USER_KEY, nextUserPayload)
+
+  if (sessionChanged) {
+    notifyAuthChanged()
+  }
 }
 
 export function clearAuthSession() {

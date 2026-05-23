@@ -124,6 +124,15 @@ function openUserMenu() {
   isUserMenuOpen.value = true
 }
 
+function handleUserClick() {
+  if (!ensureLoggedIn({ source: 'navbar-user-center' })) {
+    return
+  }
+
+  closeUserMenu()
+  router.push('/user')
+}
+
 function closeUserMenu() {
   if (userMenuCloseTimer) {
     window.clearTimeout(userMenuCloseTimer)
@@ -306,6 +315,7 @@ watch(
               type="button"
               class="flex h-12 items-center gap-3 rounded-full border border-transparent bg-transparent px-4 transition-colors hover:border-slate-200 hover:bg-slate-50"
               :class="isUserMenuOpen ? 'border-slate-200 bg-slate-50' : ''"
+              @click="handleUserClick"
             >
               <Avatar size="md" :src="currentUser.avatarSrc" :fallback="currentUser.avatar" />
               <div class="flex flex-col justify-center text-left">

@@ -4,11 +4,13 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   BadgeCheck,
+  Flag,
   Heart,
   LoaderCircle,
   MessageCircle,
   ShoppingBag,
   Star,
+  X,
 } from 'lucide-vue-next'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +25,8 @@ const loading = ref(false)
 const selectedImageIndex = ref(0)
 const favoriteLoading = ref(false)
 const isFavorited = ref(false)
+const reportDialogVisible = ref(false)
+const reportSubmitting = ref(false)
 
 const detail = reactive({
   id: null,
@@ -54,6 +58,19 @@ const toast = reactive({
   type: 'success',
   message: '',
 })
+
+const reportForm = reactive({
+  reasonType: '商品信息虚假',
+  description: '',
+})
+
+const reportReasonOptions = [
+  '商品信息虚假',
+  '疑似违禁或违规商品',
+  '价格或交易方式异常',
+  '盗图或冒用他人信息',
+  '其他问题',
+]
 
 const galleryImages = computed(() => {
   const fromImages = Array.isArray(detail.images)
@@ -309,6 +326,69 @@ function handleFavorite() {
   }, 180)
 }
 
+function openReportDialog() {
+  if (!ensureLoggedIn({ source: 'goods-detail-report' })) {
+    return
+  }
+  if (!detail.id) {
+    showToast('商品信息缺失，暂时无法举报', 'error')
+    return
+  }
+
+  reportDialogVisible.value = true
+}
+
+function closeReportDialog() {
+  if (reportSubmitting.value) {
+    return
+  }
+
+  reportDialogVisible.value = false
+}
+
+function buildReportReason() {
+  const description = reportForm.description.trim()
+  if (!description) {
+    return reportForm.reasonType
+  }
+
+  return `${reportForm.reasonType}：${description}`
+}
+
+async function submitReport() {
+  if (reportSubmitting.value) {
+    return
+  }
+
+  const reason = buildReportReason()
+  if (!reason.trim()) {
+    showToast('请选择或填写举报原因', 'error')
+    return
+  }
+
+  reportSubmitting.value = true
+  try {
+    const { data } = await request.post('/user/report', {
+      targetType: 1,
+      targetId: detail.id,
+      reason,
+    })
+
+    if (data?.code !== 1) {
+      throw new Error(data?.msg || '举报提交失败')
+    }
+
+    showToast('举报已提交，管理员会尽快处理')
+    reportDialogVisible.value = false
+    reportForm.reasonType = '商品信息虚假'
+    reportForm.description = ''
+  } catch (error) {
+    showToast(getErrorMessage(error, '举报提交失败'), 'error')
+  } finally {
+    reportSubmitting.value = false
+  }
+}
+
 function handleAuthChanged() {
   syncFavoriteStatus()
 }
@@ -482,8 +562,8 @@ onBeforeUnmount(() => {
                 </div>
               </div>
 
-              <div class="flex items-center gap-3">
-                <div class="grid min-w-0 flex-1 grid-cols-2 overflow-hidden rounded-full">
+              <div class="space-y-3">
+                <div class="grid min-w-0 grid-cols-2 overflow-hidden rounded-full">
                   <button
                     type="button"
                     class="flex h-12 items-center justify-center gap-2 bg-[#ffe55c] px-4 text-base font-bold text-slate-900 transition hover:bg-[#ffdf40]"
@@ -508,21 +588,33 @@ onBeforeUnmount(() => {
                   </button>
                 </div>
 
-                <Button
-                  :variant="isFavorited ? 'default' : 'outline'"
-                  size="lg"
-                  class="h-12 shrink-0 justify-center rounded-full px-6 text-base font-bold"
-                  :class="
-                    isFavorited
-                      ? 'border border-brand-500 bg-brand-500 text-white hover:bg-brand-600'
-                      : 'border border-slate-200 bg-white text-slate-700 hover:border-brand-200 hover:text-brand-600'
-                  "
-                  :disabled="favoriteLoading"
-                  @click="handleFavorite"
-                >
-                  <Heart class="h-4 w-4" :class="isFavorited ? 'fill-current' : ''" />
-                  {{ favoriteLoading ? '处理中' : isFavorited ? '已收藏' : '收藏' }}
-                </Button>
+                <div class="grid grid-cols-2 gap-3">
+                  <Button
+                    :variant="isFavorited ? 'default' : 'outline'"
+                    size="lg"
+                    class="h-11 justify-center rounded-full px-5 text-sm font-bold"
+                    :class="
+                      isFavorited
+                        ? 'border border-brand-500 bg-brand-500 text-white hover:bg-brand-600'
+                        : 'border border-slate-200 bg-white text-slate-700 hover:border-brand-200 hover:text-brand-600'
+                    "
+                    :disabled="favoriteLoading"
+                    @click="handleFavorite"
+                  >
+                    <Heart class="h-4 w-4" :class="isFavorited ? 'fill-current' : ''" />
+                    {{ favoriteLoading ? '处理中' : isFavorited ? '已收藏' : '收藏' }}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    class="h-11 justify-center rounded-full border border-rose-100 bg-white px-5 text-sm font-bold text-rose-600 hover:border-rose-200 hover:bg-rose-50"
+                    @click="openReportDialog"
+                  >
+                    <Flag class="h-4 w-4" />
+                    举报
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -547,6 +639,97 @@ onBeforeUnmount(() => {
           <Star v-if="toast.type !== 'error'" class="h-4 w-4" />
           {{ toast.message }}
         </span>
+      </div>
+    </transition>
+
+    <transition
+      enter-active-class="transition duration-200"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition duration-150"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div
+        v-if="reportDialogVisible"
+        class="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/35 px-4 py-6 backdrop-blur-sm"
+        @click.self="closeReportDialog"
+      >
+        <section
+          class="w-full max-w-[520px] overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_30px_90px_-45px_rgba(15,23,42,0.55)]"
+        >
+          <header class="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+            <div class="space-y-1">
+              <h2 class="text-xl font-black text-slate-950">举报商品</h2>
+              <p class="text-sm leading-6 text-slate-500">
+                请选择最接近的问题类型，补充的信息会帮助管理员更快判断。
+              </p>
+            </div>
+            <button
+              type="button"
+              class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:bg-slate-50"
+              :disabled="reportSubmitting"
+              @click="closeReportDialog"
+            >
+              <X class="h-4 w-4" />
+            </button>
+          </header>
+
+          <div class="space-y-5 px-6 py-5">
+            <div class="grid gap-2">
+              <button
+                v-for="option in reportReasonOptions"
+                :key="option"
+                type="button"
+                class="flex min-h-11 items-center justify-between rounded-2xl border px-4 text-left text-sm font-semibold transition"
+                :class="
+                  reportForm.reasonType === option
+                    ? 'border-rose-300 bg-rose-50 text-rose-700'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                "
+                @click="reportForm.reasonType = option"
+              >
+                <span>{{ option }}</span>
+                <span
+                  class="h-2.5 w-2.5 rounded-full"
+                  :class="reportForm.reasonType === option ? 'bg-rose-500' : 'bg-slate-200'"
+                />
+              </button>
+            </div>
+
+            <label class="block space-y-2">
+              <span class="text-sm font-bold text-slate-800">补充说明</span>
+              <textarea
+                v-model="reportForm.description"
+                maxlength="180"
+                rows="4"
+                class="w-full resize-none rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-rose-300 focus:bg-white"
+                placeholder="例如：图片和描述不符、疑似违禁品、要求线下转账等"
+              />
+              <span class="block text-right text-xs text-slate-400">
+                {{ reportForm.description.length }}/180
+              </span>
+            </label>
+          </div>
+
+          <footer class="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4">
+            <Button
+              variant="outline"
+              class="rounded-full border-slate-200 px-5 text-slate-600"
+              :disabled="reportSubmitting"
+              @click="closeReportDialog"
+            >
+              取消
+            </Button>
+            <Button
+              class="rounded-full bg-rose-500 px-6 text-white hover:bg-rose-600"
+              :disabled="reportSubmitting"
+              @click="submitReport"
+            >
+              {{ reportSubmitting ? '提交中' : '提交举报' }}
+            </Button>
+          </footer>
+        </section>
       </div>
     </transition>
   </section>

@@ -5,16 +5,18 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   BadgeCheck,
   ChevronDown,
+  Flag,
   Heart,
   LoaderCircle,
   MapPin,
   PackageOpen,
   Star,
+  X,
 } from 'lucide-vue-next'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import request from '@/utils/request'
+import request, { ensureLoggedIn } from '@/utils/request'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,6 +31,8 @@ const activeTab = ref('goods')
 const activeFilter = ref('latest')
 const sortLabel = ref('最新发布')
 const goods = ref([])
+const reportDialogVisible = ref(false)
+const reportSubmitting = ref(false)
 
 const seller = reactive({
   sellerId: null,
@@ -54,6 +58,19 @@ const toast = reactive({
   type: 'success',
   message: '',
 })
+
+const reportForm = reactive({
+  reasonType: '商家信息不实',
+  description: '',
+})
+
+const reportReasonOptions = [
+  '商家信息不实',
+  '疑似欺诈或诱导转账',
+  '交易态度恶劣',
+  '发布违规商品',
+  '其他问题',
+]
 
 const totalPages = computed(() => {
   const count = Math.ceil(total.value / PAGE_SIZE)
@@ -226,6 +243,69 @@ function handleFollow() {
   showToast('关注功能开发中，敬请期待')
 }
 
+function openReportDialog() {
+  if (!ensureLoggedIn({ source: 'seller-profile-report' })) {
+    return
+  }
+  if (!seller.sellerId) {
+    showToast('商家信息缺失，暂时无法举报', 'error')
+    return
+  }
+
+  reportDialogVisible.value = true
+}
+
+function closeReportDialog() {
+  if (reportSubmitting.value) {
+    return
+  }
+
+  reportDialogVisible.value = false
+}
+
+function buildReportReason() {
+  const description = reportForm.description.trim()
+  if (!description) {
+    return reportForm.reasonType
+  }
+
+  return `${reportForm.reasonType}：${description}`
+}
+
+async function submitReport() {
+  if (reportSubmitting.value) {
+    return
+  }
+
+  const reason = buildReportReason()
+  if (!reason.trim()) {
+    showToast('请选择或填写举报原因', 'error')
+    return
+  }
+
+  reportSubmitting.value = true
+  try {
+    const { data } = await request.post('/user/report', {
+      targetType: 2,
+      targetId: seller.sellerId,
+      reason,
+    })
+
+    if (data?.code !== 1) {
+      throw new Error(data?.msg || '举报提交失败')
+    }
+
+    showToast('举报已提交，管理员会尽快处理')
+    reportDialogVisible.value = false
+    reportForm.reasonType = '商家信息不实'
+    reportForm.description = ''
+  } catch (error) {
+    showToast(getErrorMessage(error, '举报提交失败'), 'error')
+  } finally {
+    reportSubmitting.value = false
+  }
+}
+
 function selectFilter(filter) {
   if (activeFilter.value === filter) return
   activeFilter.value = filter
@@ -313,13 +393,24 @@ onMounted(() => {
               </div>
             </div>
 
-            <Button
-              class="h-11 rounded-full bg-yellow-400 px-6 text-slate-950 shadow-[0_18px_40px_-26px_rgba(250,204,21,0.72)] hover:bg-yellow-500"
-              @click="handleFollow"
-            >
-              <Heart class="mr-2 h-4 w-4" />
-              关注
-            </Button>
+            <div class="flex shrink-0 flex-wrap items-center justify-end gap-3">
+              <Button
+                class="h-11 rounded-full bg-yellow-400 px-6 text-slate-950 shadow-[0_18px_40px_-26px_rgba(250,204,21,0.72)] hover:bg-yellow-500"
+                @click="handleFollow"
+              >
+                <Heart class="mr-2 h-4 w-4" />
+                关注
+              </Button>
+
+              <Button
+                variant="outline"
+                class="h-11 rounded-full border-rose-100 bg-white px-5 text-rose-600 hover:border-rose-200 hover:bg-rose-50"
+                @click="openReportDialog"
+              >
+                <Flag class="mr-2 h-4 w-4" />
+                举报
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -592,6 +683,97 @@ onMounted(() => {
         :class="toast.type === 'error' ? 'bg-rose-500' : 'bg-slate-950'"
       >
         {{ toast.message }}
+      </div>
+    </transition>
+
+    <transition
+      enter-active-class="transition duration-200"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition duration-150"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div
+        v-if="reportDialogVisible"
+        class="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/35 px-4 py-6 backdrop-blur-sm"
+        @click.self="closeReportDialog"
+      >
+        <section
+          class="w-full max-w-[520px] overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_30px_90px_-45px_rgba(15,23,42,0.55)]"
+        >
+          <header class="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+            <div class="space-y-1">
+              <h2 class="text-xl font-black text-slate-950">举报商家</h2>
+              <p class="text-sm leading-6 text-slate-500">
+                请选择最接近的问题类型，补充的信息会帮助管理员更快判断。
+              </p>
+            </div>
+            <button
+              type="button"
+              class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:bg-slate-50"
+              :disabled="reportSubmitting"
+              @click="closeReportDialog"
+            >
+              <X class="h-4 w-4" />
+            </button>
+          </header>
+
+          <div class="space-y-5 px-6 py-5">
+            <div class="grid gap-2">
+              <button
+                v-for="option in reportReasonOptions"
+                :key="option"
+                type="button"
+                class="flex min-h-11 items-center justify-between rounded-2xl border px-4 text-left text-sm font-semibold transition"
+                :class="
+                  reportForm.reasonType === option
+                    ? 'border-rose-300 bg-rose-50 text-rose-700'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                "
+                @click="reportForm.reasonType = option"
+              >
+                <span>{{ option }}</span>
+                <span
+                  class="h-2.5 w-2.5 rounded-full"
+                  :class="reportForm.reasonType === option ? 'bg-rose-500' : 'bg-slate-200'"
+                />
+              </button>
+            </div>
+
+            <label class="block space-y-2">
+              <span class="text-sm font-bold text-slate-800">补充说明</span>
+              <textarea
+                v-model="reportForm.description"
+                maxlength="180"
+                rows="4"
+                class="w-full resize-none rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-rose-300 focus:bg-white"
+                placeholder="例如：要求线下转账、辱骂骚扰、商家信息与实际不符等"
+              />
+              <span class="block text-right text-xs text-slate-400">
+                {{ reportForm.description.length }}/180
+              </span>
+            </label>
+          </div>
+
+          <footer class="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4">
+            <Button
+              variant="outline"
+              class="rounded-full border-slate-200 px-5 text-slate-600"
+              :disabled="reportSubmitting"
+              @click="closeReportDialog"
+            >
+              取消
+            </Button>
+            <Button
+              class="rounded-full bg-rose-500 px-6 text-white hover:bg-rose-600"
+              :disabled="reportSubmitting"
+              @click="submitReport"
+            >
+              {{ reportSubmitting ? '提交中' : '提交举报' }}
+            </Button>
+          </footer>
+        </section>
       </div>
     </transition>
   </section>

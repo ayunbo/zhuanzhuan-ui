@@ -120,6 +120,15 @@ const router = createRouter({
           },
         },
         {
+          path: 'reports',
+          name: 'user-reports',
+          component: () => import('../views/UserReportsView.vue'),
+          meta: {
+            ...userCenterMeta,
+            title: '我的举报',
+          },
+        },
+        {
           path: 'profile',
           name: 'user-profile',
           component: () => import('../views/UserProfileSettingsView.vue'),

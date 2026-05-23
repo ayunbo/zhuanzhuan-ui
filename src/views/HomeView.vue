@@ -533,77 +533,55 @@ onBeforeUnmount(() => {
               <div class="absolute bottom-0 right-14 h-40 w-40 rounded-full bg-sky-100/70 blur-3xl" />
               <div class="absolute right-24 top-6 h-24 w-24 rounded-full border border-white/70 bg-white/40 blur-2xl" />
 
-              <div class="relative grid h-full w-full grid-cols-[minmax(0,1.15fr)_minmax(220px,0.85fr)] gap-6">
+              <div class="relative grid h-full w-full grid-cols-[minmax(0,1.05fr)_minmax(240px,0.95fr)] gap-6">
                 <div class="flex h-full flex-col justify-between">
-                  <div class="max-w-md space-y-8">
+                  <div class="max-w-lg space-y-6">
+                    <div class="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 text-xs font-semibold text-orange-600 shadow-sm">
+                      <Sparkles class="h-3.5 w-3.5" />
+                      校园闲置好物
+                    </div>
 
-                    <div class="space-y-6">
-                      <h2 class="text-[30px] font-black leading-tight text-slate-950">
-                        欢迎来到二手物品交易平台<br>发现身边的宝藏
+                    <div class="space-y-4">
+                      <h2 class="text-[32px] font-black leading-tight text-slate-950">
+                        今天想淘点什么？
                       </h2>
-                      <p class="text-sm leading-7 text-slate-600">
-                        真实分类与商品数据已接入，浏览同校正在出售的闲置好物，快速找到你需要的那一件。
+                      <p class="max-w-md text-sm leading-7 text-slate-600">
+                        教材、数码、宿舍小物和通勤装备都在这里。按分类慢慢逛，也可以直接搜索你需要的关键词。
                       </p>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2.5">
+                      <button
+                        v-for="tab in level1Tabs.slice(0, 4)"
+                        :key="`hero-${tab.key}`"
+                        type="button"
+                        class="rounded-full border border-white/80 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
+                        @click="handleTabClick(tab)"
+                      >
+                        {{ tab.label }}
+                      </button>
                     </div>
                   </div>
 
-                  <div class="flex max-w-md flex-wrap gap-2.5">
-                    <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
-                      {{ activeCategoryTitle }}
-                    </span>
-                    <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
-                      当前已加载 {{ visibleProducts.length }} 件
-                    </span>
-                    <span class="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
-                      全站在售 {{ total }} 件
-                    </span>
+                  <div class="grid max-w-md grid-cols-3 gap-2.5">
+                    <div class="rounded-2xl bg-white/85 px-3 py-3 shadow-sm">
+                      <p class="text-[11px] font-semibold text-slate-400">当前分类</p>
+                      <p class="mt-1 truncate text-sm font-black text-slate-900">{{ activeCategoryTitle }}</p>
+                    </div>
+                    <div class="rounded-2xl bg-white/85 px-3 py-3 shadow-sm">
+                      <p class="text-[11px] font-semibold text-slate-400">已加载</p>
+                      <p class="mt-1 text-sm font-black text-slate-900">{{ visibleProducts.length }} 件</p>
+                    </div>
+                    <div class="rounded-2xl bg-white/85 px-3 py-3 shadow-sm">
+                      <p class="text-[11px] font-semibold text-slate-400">在售</p>
+                      <p class="mt-1 text-sm font-black text-slate-900">{{ total }} 件</p>
+                    </div>
                   </div>
                 </div>
 
                 <div class="relative flex h-full items-center justify-center">
                   <div class="relative h-full w-full">
-                    <div
-                      class="absolute right-1 top-6 w-[178px] rounded-[26px] border border-white/80 bg-white/90 p-4 shadow-[0_28px_60px_-34px_rgba(249,115,22,0.45)] transition duration-500 hover:-translate-y-1 hover:rotate-0"
-                      style="transform: rotate(8deg); transform-origin: center;"
-                    >
-                      <div class="rounded-[22px] bg-[linear-gradient(135deg,#fde68a_0%,#fef3c7_42%,#ffffff_100%)] p-4">
-                        <div class="h-24 rounded-[18px] bg-white/60" />
-                      </div>
-                      <div class="mt-4 space-y-2">
-                        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-orange-500">
-                          分类树
-                        </p>
-                        <p class="line-clamp-2 text-sm font-black text-slate-900">
-                          一级二级三级分类实时渲染，导航与商品筛选同步联动
-                        </p>
-                      </div>
-                    </div>
-
-                    <div
-                      class="absolute bottom-7 left-2 w-[190px] rounded-[26px] border border-white/80 bg-white/95 p-4 shadow-[0_28px_60px_-34px_rgba(15,23,42,0.28)] transition duration-500 hover:-translate-y-1 hover:rotate-0"
-                      style="transform: rotate(-7deg); transform-origin: center;"
-                    >
-                      <div class="rounded-[22px] bg-[linear-gradient(135deg,#dbeafe_0%,#eff6ff_50%,#ffffff_100%)] p-4">
-                        <div class="flex items-center justify-between">
-                          <span class="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-sky-600">
-                            商品流
-                          </span>
-                          <Sparkles class="h-4 w-4 text-sky-500" />
-                        </div>
-                        <div class="mt-4 h-20 rounded-[18px] bg-white/65" />
-                      </div>
-                      <div class="mt-4 flex items-center justify-between gap-3">
-                        <div class="min-w-0">
-                          <p class="truncate text-sm font-black text-slate-900">无限滚动分页</p>
-                          <p class="mt-1 text-xs text-slate-500">触底继续加载真实数据</p>
-                        </div>
-                        <div class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
-                          在线
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="absolute right-10 top-1/2 h-14 w-14 -translate-y-1/2 rounded-full bg-white/75 shadow-lg backdrop-blur transition duration-500 hover:-translate-y-[55%]">
+                    <div class="absolute right-10 top-1/2 h-14 w-14 -translate-y-1/2 rounded-full bg-white/80 shadow-lg backdrop-blur transition duration-500 hover:-translate-y-[55%]">
                       <div class="flex h-full w-full items-center justify-center">
                         <Package class="h-6 w-6 text-brand-500" />
                       </div>

@@ -36,22 +36,18 @@ export function notifyAuthChanged() {
   window.dispatchEvent(new Event(AUTH_CHANGED_EVENT))
 }
 
-export function setAuthSession(loginData) {
+export function setAuthSession(loginData, options = {}) {
   if (!loginData?.token) {
     return
   }
 
-  const nextToken = String(loginData.token)
-  const nextUserPayload = JSON.stringify(loginData)
-  const currentToken = window.localStorage.getItem(AUTH_TOKEN_KEY) || ''
-  const currentUserPayload = window.localStorage.getItem(AUTH_USER_KEY) || ''
-  const sessionChanged = currentToken !== nextToken || currentUserPayload !== nextUserPayload
+  const { notify = true } = options
 
   unauthorizedDialogOpened = false
-  window.localStorage.setItem(AUTH_TOKEN_KEY, nextToken)
-  window.localStorage.setItem(AUTH_USER_KEY, nextUserPayload)
+  window.localStorage.setItem(AUTH_TOKEN_KEY, loginData.token)
+  window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(loginData))
 
-  if (sessionChanged) {
+  if (notify) {
     notifyAuthChanged()
   }
 }
@@ -162,13 +158,16 @@ export async function validateAuthSession(options = {}) {
     }
 
     const existing = getAuthUser() || {}
-    setAuthSession({
-      ...existing,
-      token,
-      studentNo: data.data.studentNo ?? existing.studentNo ?? '',
-      name: data.data.name ?? data.data.studentNo ?? existing.name ?? '',
-      avatar: data.data.avatar ?? existing.avatar ?? '',
-    })
+    setAuthSession(
+      {
+        ...existing,
+        token,
+        studentNo: data.data.studentNo ?? existing.studentNo ?? '',
+        name: data.data.name ?? data.data.studentNo ?? existing.name ?? '',
+        avatar: data.data.avatar ?? existing.avatar ?? '',
+      },
+      { notify: false },
+    )
 
     return true
   } catch {

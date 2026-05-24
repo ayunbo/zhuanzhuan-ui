@@ -112,13 +112,16 @@ function syncAuthCache() {
     return
   }
 
-  setAuthSession({
-    ...existing,
-    token,
-    studentNo: profile.studentNo || existing.studentNo || '',
-    name: profile.name || profile.studentNo || existing.name || '',
-    avatar: profile.avatar || '',
-  })
+  setAuthSession(
+    {
+      ...existing,
+      token,
+      studentNo: profile.studentNo || existing.studentNo || '',
+      name: profile.name || profile.studentNo || existing.name || '',
+      avatar: profile.avatar || '',
+    },
+    { notify: false },
+  )
 }
 
 function resetErrors() {

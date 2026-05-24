@@ -36,15 +36,20 @@ export function notifyAuthChanged() {
   window.dispatchEvent(new Event(AUTH_CHANGED_EVENT))
 }
 
-export function setAuthSession(loginData) {
+export function setAuthSession(loginData, options = {}) {
   if (!loginData?.token) {
     return
   }
 
+  const { notify = true } = options
+
   unauthorizedDialogOpened = false
   window.localStorage.setItem(AUTH_TOKEN_KEY, loginData.token)
   window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(loginData))
-  notifyAuthChanged()
+
+  if (notify) {
+    notifyAuthChanged()
+  }
 }
 
 export function clearAuthSession() {
@@ -153,13 +158,16 @@ export async function validateAuthSession(options = {}) {
     }
 
     const existing = getAuthUser() || {}
-    setAuthSession({
-      ...existing,
-      token,
-      studentNo: data.data.studentNo ?? existing.studentNo ?? '',
-      name: data.data.name ?? data.data.studentNo ?? existing.name ?? '',
-      avatar: data.data.avatar ?? existing.avatar ?? '',
-    })
+    setAuthSession(
+      {
+        ...existing,
+        token,
+        studentNo: data.data.studentNo ?? existing.studentNo ?? '',
+        name: data.data.name ?? data.data.studentNo ?? existing.name ?? '',
+        avatar: data.data.avatar ?? existing.avatar ?? '',
+      },
+      { notify: false },
+    )
 
     return true
   } catch {

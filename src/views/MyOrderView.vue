@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -40,6 +40,14 @@ const statusTextMap = {
   4: '超时关闭',
 }
 
+const tabs = [
+  { name: 'all', label: '全部订单' },
+  { name: 'pendingPay', label: '待付款' },
+  { name: 'paid', label: '已支付' },
+  { name: 'finished', label: '已完成' },
+  { name: 'canceled', label: '已取消' },
+]
+
 const routeSummary = computed(() => [
   {
     label: '视图',
@@ -54,14 +62,6 @@ const routeSummary = computed(() => [
     value: `${total.value} 条`,
   },
 ])
-
-const tabs = [
-  { name: 'all', label: '全部订单' },
-  { name: 'pendingPay', label: '待付款' },
-  { name: 'paid', label: '已支付' },
-  { name: 'finished', label: '已完成' },
-  { name: 'canceled', label: '已取消' },
-]
 
 function getStatusText(status) {
   return statusTextMap[status] || '未知状态'
@@ -110,6 +110,16 @@ function goPay(order) {
   })
 }
 
+function goReview(order) {
+  if (!order?.id) return
+  router.push({
+    path: '/order/review',
+    query: {
+      orderId: String(order.id),
+    },
+  })
+}
+
 async function handleCancel(order) {
   try {
     await ElMessageBox.confirm('确认取消当前订单吗？', '取消订单', {
@@ -153,7 +163,7 @@ onMounted(loadOrders)
       <div class="banner-copy">
         <p>ORDER CENTER</p>
         <h1>订单中心</h1>
-        <span>当前页面只保留状态筛选、路由摘要和空态，占位等待订单列表接口接入。</span>
+        <span>展示当前账号的真实订单列表，并按订单状态进行筛选。</span>
       </div>
 
       <div class="banner-meta">
@@ -174,7 +184,7 @@ onMounted(loadOrders)
           <div class="panel-head">
             <div>
               <h2>订单列表</h2>
-              <p>这里展示当前账号的真实订单数据，并根据订单状态给出可执行操作。</p>
+              <p>这里展示当前账号的订单数据，并根据订单状态给出可执行操作。</p>
             </div>
             <el-tag round type="success">已接入</el-tag>
           </div>
@@ -217,6 +227,9 @@ onMounted(loadOrders)
                     </el-button>
                     <el-button v-if="item.status === 1 && typeValue !== 'sell'" type="success" @click="handleComplete(item)">
                       确认完成
+                    </el-button>
+                    <el-button v-if="item.status === 2" type="primary" plain @click="goReview(item)">
+                      {{ typeValue === 'sell' ? '查看评价' : '去评价' }}
                     </el-button>
                   </div>
                 </div>
@@ -433,22 +446,6 @@ onMounted(loadOrders)
 
 .empty-wrap {
   padding: 14px 0 4px;
-}
-
-.empty-copy {
-  display: grid;
-  gap: 6px;
-  text-align: center;
-}
-
-.empty-copy strong {
-  font-size: 18px;
-  color: var(--zz-black);
-}
-
-.empty-copy span {
-  color: var(--zz-text-secondary);
-  line-height: 1.65;
 }
 
 .route-strip {

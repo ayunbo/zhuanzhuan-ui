@@ -1,35 +1,96 @@
-﻿import request from '@/utils/request'
+import request from '@/utils/request'
 
-// 发起虚拟钱包支付，生成本次订单的钱包支付请求
-export function launchVirtualWalletPay(orderId) {
-  return request({
+function unwrapBusinessResponse(response, fallbackMessage) {
+  const payload = response?.data
+  if (payload?.code !== 1) {
+    throw new Error(payload?.msg || fallbackMessage)
+  }
+
+  return payload?.data ?? null
+}
+
+export async function launchVirtualWalletPay(orderId) {
+  const response = await request({
     url: `/user/pay/virtual-wallet/${orderId}`,
     method: 'post',
   })
+
+  return unwrapBusinessResponse(response, '初始化虚拟钱包支付失败')
 }
 
-// 加载钱包页展示信息：钱包余额、银行卡、订单金额等
-export function fetchWalletPageInfo(params) {
-  return request({
+export async function fetchWalletPageInfo(params) {
+  const response = await request({
     url: '/wallet/page/info',
     method: 'get',
     params,
   })
+
+  return unwrapBusinessResponse(response, '加载钱包支付信息失败')
 }
 
-// 确认虚拟钱包支付
-export function confirmVirtualWalletPay(data) {
-  return request({
+export async function confirmVirtualWalletPay(data) {
+  const response = await request({
     url: '/wallet/page/confirm',
     method: 'post',
     data,
   })
+
+  return unwrapBusinessResponse(response, '虚拟钱包支付失败')
 }
 
-// 查询订单对应的支付状态，便于钱包页手动刷新
-export function fetchVirtualWalletPayStatus(orderId) {
-  return request({
+export async function fetchVirtualWalletPayStatus(orderId) {
+  const response = await request({
     url: `/user/pay/status/${orderId}`,
     method: 'get',
   })
+
+  return unwrapBusinessResponse(response, '查询支付状态失败')
+}
+
+export async function fetchWalletOverview() {
+  const response = await request({
+    url: '/user/wallet/overview',
+    method: 'get',
+  })
+
+  return unwrapBusinessResponse(response, '加载钱包概览失败')
+}
+
+export async function fetchWalletRecords(params) {
+  const response = await request({
+    url: '/user/wallet/records',
+    method: 'get',
+    params,
+  })
+
+  return unwrapBusinessResponse(response, '加载钱包账单失败')
+}
+
+export async function openWalletAccount(data) {
+  const response = await request({
+    url: '/user/wallet/open',
+    method: 'post',
+    data,
+  })
+
+  return unwrapBusinessResponse(response, '开通钱包失败')
+}
+
+export async function bindWalletBankCard(data) {
+  const response = await request({
+    url: '/user/wallet/bank-card',
+    method: 'post',
+    data,
+  })
+
+  return unwrapBusinessResponse(response, '绑定银行卡失败')
+}
+
+export async function setDefaultWalletBankCard(bankCardId) {
+  const response = await request({
+    url: `/user/wallet/bank-card/default/${bankCardId}`,
+    method: 'put',
+  })
+
+  return unwrapBusinessResponse(response, '设置默认银行卡失败')
 }

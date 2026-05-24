@@ -1,9 +1,9 @@
 <script setup>
-import { CollectionTag, Goods, Postcard, Star, Tickets, User } from '@element-plus/icons-vue'
+import { Clock, CollectionTag, Goods, Postcard, Star, Tickets, User } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
-const props = defineProps({
+defineProps({
   activeKey: {
     type: String,
     default: 'profile',
@@ -16,27 +16,18 @@ const menuSections = computed(() => [
   {
     title: '我的闲置',
     items: [
-      { key: 'profile', label: '个人主页', icon: User, action: () => router.push('/profile') },
-      { key: 'published', label: '我发布的', icon: Goods, action: () => router.push('/seller/goods') },
-      {
-        key: 'bought',
-        label: '我买到的',
-        icon: Tickets,
-        action: () => router.push({ path: '/my-order', query: { type: 'buy' } }),
-      },
-      {
-        key: 'sold',
-        label: '我卖出的',
-        icon: CollectionTag,
-        action: () => router.push({ path: '/my-order', query: { type: 'sell' } }),
-      },
+      { key: 'profile', label: '个人主页', icon: User, action: () => router.push('/user') },
+      { key: 'published', label: '我发布的', icon: Goods, action: () => router.push('/user/published') },
+      { key: 'bought', label: '我买到的', icon: Tickets, action: () => router.push('/user/bought') },
+      { key: 'sold', label: '我卖出的', icon: CollectionTag, action: () => router.push('/user/sold') },
     ],
   },
   {
     title: '账户设置',
     items: [
-      { key: 'favorites', label: '我的收藏', icon: Star, action: () => router.push('/profile?tab=favorites') },
-      { key: 'seller-auth', label: '卖家认证', icon: Postcard, action: () => router.push('/seller-auth') },
+      { key: 'favorites', label: '我的收藏', icon: Star, action: () => router.push('/user/favorites') },
+      { key: 'history', label: '浏览历史', icon: Clock, action: () => router.push('/history') },
+      { key: 'seller-auth', label: '卖家认证', icon: Postcard, action: () => router.push('/user/security') },
     ],
   },
 ])

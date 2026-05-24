@@ -15,6 +15,13 @@ export function fetchPublicGoodsById(id) {
   })
 }
 
+export function fetchSellerSpace(sellerId) {
+  return request({
+    url: `/user/goods/seller/${sellerId}`,
+    method: 'get',
+  })
+}
+
 export function fetchSellerGoodsPage(params) {
   return request({
     url: '/user/seller/goods/page',

@@ -1,138 +1,187 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { getStoredToken } from '@/utils/auth'
+import HomeView from '../views/HomeView.vue'
 
-const routes = [
-  {
-    path: '/',
-    name: 'home',
-    component: () => import('@/views/HomeView.vue'),
-    meta: { title: '首页' },
-  },
-  {
-    path: '/login',
-    name: 'login',
-    component: () => import('@/views/LoginView.vue'),
-    meta: { title: '登录', guestOnly: true },
-  },
-  {
-    path: '/register',
-    name: 'register',
-    component: () => import('@/views/RegisterView.vue'),
-    meta: { title: '注册', guestOnly: true },
-  },
-  {
-    path: '/profile',
-    name: 'profile',
-    component: () => import('@/views/ProfileView.vue'),
-    meta: { title: '个人中心', requiresAuth: true },
-  },
-  {
-    path: '/seller-auth',
-    name: 'sellerAuth',
-    component: () => import('@/views/SellerAuthView.vue'),
-    meta: { title: '卖家认证', requiresAuth: true },
-  },
-  {
-    path: '/seller/goods',
-    name: 'seller-goods',
-    component: () => import('@/views/SellerGoodsManageView.vue'),
-    meta: { title: '我的闲置', requiresAuth: true },
-  },
-  {
-    path: '/goods',
-    name: 'goods-list',
-    component: () => import('@/views/GoodsListView.vue'),
-    meta: { title: '商品广场' },
-  },
-  {
-    path: '/goods/:id',
-    name: 'goods-detail',
-    component: () => import('@/views/GoodsDetailView.vue'),
-    meta: { title: '商品详情' },
-  },
-  {
-    path: '/order/create',
-    name: 'order-create',
-    component: () => import('@/views/OrderCreateView.vue'),
-    meta: { title: '创建订单', requiresAuth: true },
-  },
-  {
-    path: '/order-test',
-    name: 'order-test',
-    component: () => import('@/views/OrderTestView.vue'),
-    meta: { title: '订单测试', requiresAuth: true },
-  },
-  {
-    path: '/pay',
-    name: 'pay',
-    component: () => import('@/views/PayView.vue'),
-    meta: { title: '支付中心', requiresAuth: true },
-  },
-  {
-    path: '/wallet',
-    name: 'wallet',
-    component: () => import('@/views/VirtualWalletView.vue'),
-    meta: { title: '虚拟钱包', requiresAuth: true },
-  },
-  {
-    path: '/my-order',
-    name: 'my-order',
-    component: () => import('@/views/MyOrderView.vue'),
-    meta: { title: '我的订单', requiresAuth: true },
-  },
-  {
-    path: '/order/detail/:id',
-    name: 'order-detail',
-    component: () => import('@/views/OrderDetailView.vue'),
-    meta: { title: '订单详情', requiresAuth: true },
-  },
-  {
-    path: '/:pathMatch(.*)*',
-    name: 'notFound',
-    component: () => import('@/views/NotFoundView.vue'),
-    meta: { title: '页面不存在' },
-  },
-]
+const userCenterMeta = {
+  showNavbarSearch: false,
+}
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes,
-})
-
-router.beforeEach((to) => {
-  const token = getStoredToken()
-
-  if (to.name === 'login' || to.name === 'register') {
-    const redirectPath = typeof to.query.redirect === 'string' ? to.query.redirect : ''
-    return {
+  routes: [
+    {
+      path: '/',
       name: 'home',
-      query: {
-        auth: to.name === 'register' ? 'register' : 'login',
-        ...(redirectPath ? { redirect: redirectPath } : {}),
+      component: HomeView,
+    },
+    {
+      path: '/about',
+      name: 'about',
+      component: () => import('../views/AboutView.vue'),
+    },
+    {
+      path: '/login',
+      name: 'login',
+      meta: {
+        hideChrome: true,
       },
-    }
-  }
-
-  if (to.meta.requiresAuth && !token) {
-    return {
-      name: 'home',
-      query: {
-        auth: 'login',
-        redirect: to.fullPath,
+      component: () => import('../views/LoginView.vue'),
+    },
+    {
+      path: '/publish',
+      name: 'publish',
+      component: () => import('../views/PublishGoodsView.vue'),
+    },
+    {
+      path: '/search',
+      name: 'search',
+      component: () => import('../views/SearchResultView.vue'),
+    },
+    {
+      path: '/goods/:id',
+      name: 'goods-detail',
+      component: () => import('../views/GoodsDetailView.vue'),
+    },
+    {
+      path: '/chat',
+      name: 'chat',
+      meta: {
+        showNavbarSearch: false,
       },
-    }
-  }
-
-  if (to.meta.guestOnly && token) {
-    return { name: 'home' }
-  }
-
-  return true
-})
-
-router.afterEach((to) => {
-  const pageTitle = to.meta.title || '用户端'
-  document.title = `${pageTitle} - 转转校园`
+      component: () => import('../views/chat/ChatView.vue'),
+    },
+    {
+      path: '/checkout/:id',
+      name: 'order-checkout',
+      meta: {
+        showNavbarSearch: false,
+      },
+      component: () => import('../views/OrderCheckoutView.vue'),
+    },
+    {
+      path: '/payment/:orderId',
+      name: 'payment',
+      meta: {
+        showNavbarSearch: false,
+      },
+      component: () => import('../views/PaymentView.vue'),
+    },
+    {
+      path: '/order/detail/:id',
+      name: 'order-detail',
+      meta: {
+        showNavbarSearch: false,
+      },
+      component: () => import('../views/OrderDetailView.vue'),
+    },
+    {
+      path: '/order/review',
+      name: 'order-review',
+      meta: {
+        showNavbarSearch: false,
+      },
+      component: () => import('../views/ReviewCreateView.vue'),
+    },
+    {
+      path: '/history',
+      name: 'browse-history',
+      meta: {
+        showNavbarSearch: false,
+      },
+      component: () => import('../views/BrowseHistoryView.vue'),
+    },
+    {
+      path: '/seller/:id',
+      name: 'seller-profile',
+      component: () => import('../views/SellerProfileView.vue'),
+    },
+    {
+      path: '/user',
+      component: () => import('../views/UserCenterLayout.vue'),
+      meta: userCenterMeta,
+      children: [
+        {
+          path: '',
+          name: 'user-center',
+          component: () => import('../views/UserCenterHomeView.vue'),
+          meta: {
+            ...userCenterMeta,
+          },
+        },
+        {
+          path: 'published',
+          name: 'user-published',
+          component: () => import('../views/UserPublishedGoodsView.vue'),
+          meta: {
+            ...userCenterMeta,
+            title: '我发布的',
+          },
+        },
+        {
+          path: 'sold',
+          name: 'user-sold',
+          component: () => import('../views/UserCenterSectionView.vue'),
+          meta: {
+            ...userCenterMeta,
+            title: '我卖出的',
+          },
+        },
+        {
+          path: 'bought',
+          name: 'user-bought',
+          component: () => import('../views/UserBoughtOrdersView.vue'),
+          meta: {
+            ...userCenterMeta,
+            title: '我买到的',
+          },
+        },
+        {
+          path: 'favorites',
+          name: 'user-favorites',
+          component: () => import('../views/UserFavoritesView.vue'),
+          meta: {
+            ...userCenterMeta,
+            title: '我的收藏',
+          },
+        },
+        {
+          path: 'reports',
+          name: 'user-reports',
+          component: () => import('../views/UserReportsView.vue'),
+          meta: {
+            ...userCenterMeta,
+            title: '我的举报',
+          },
+        },
+        {
+          path: 'profile',
+          name: 'user-profile',
+          component: () => import('../views/UserProfileSettingsView.vue'),
+          meta: {
+            ...userCenterMeta,
+            title: '个人资料',
+          },
+        },
+        {
+          path: 'security',
+          name: 'user-security',
+          component: () => import('../views/UserSellerAuthView.vue'),
+          meta: {
+            ...userCenterMeta,
+            title: '身份认证',
+          },
+        },
+        {
+          path: 'wallet',
+          name: 'user-wallet',
+          component: () => import('../views/UserWalletView.vue'),
+          meta: {
+            ...userCenterMeta,
+            title: '虚拟钱包',
+          },
+        },
+      ],
+    },
+  ],
 })
 
 export default router

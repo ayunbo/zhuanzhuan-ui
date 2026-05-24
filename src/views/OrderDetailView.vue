@@ -1,15 +1,19 @@
-<script setup>
+﻿<script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { cancelOrder, completeOrder, getOrderDetail } from '@/api/order'
+import { getOrderReview } from '@/api/review'
 import { formatCurrency, formatDateTime } from '@/utils/format'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 
 const loading = ref(false)
 const orderDetail = ref(null)
+const reviewExists = ref(false)
 
 const orderId = computed(() => {
   const raw = Array.isArray(route.params.id) ? route.params.id[0] : route.params.id
@@ -27,6 +31,22 @@ const statusTextMap = {
 
 const statusText = computed(() => statusTextMap[orderDetail.value?.status] || '未知状态')
 
+const isBuyer = computed(() => {
+  if (!orderDetail.value) return false
+  return Number(orderDetail.value.buyerId) === Number(authStore.user.id)
+})
+
+const isSeller = computed(() => {
+  if (!orderDetail.value) return false
+  return Number(orderDetail.value.sellerId) === Number(authStore.user.id)
+})
+
+const canOpenReview = computed(() => {
+  if (!orderDetail.value) return false
+  if (Number(orderDetail.value.status) !== 2) return false
+  return isBuyer.value || isSeller.value
+})
+
 function getTagType(status) {
   if (status === 0) return 'warning'
   if (status === 1) return 'success'
@@ -35,16 +55,31 @@ function getTagType(status) {
   return 'info'
 }
 
+async function loadReviewState() {
+  if (!orderId.value || !canOpenReview.value) {
+    reviewExists.value = false
+    return
+  }
+
+  try {
+    await getOrderReview(orderId.value)
+    reviewExists.value = true
+  } catch {
+    reviewExists.value = false
+  }
+}
+
 async function loadOrderDetail() {
   if (!orderId.value) {
     ElMessage.warning('缺少订单编号')
-    router.replace('/my-order')
+    router.replace('/user/bought')
     return
   }
 
   loading.value = true
   try {
     orderDetail.value = await getOrderDetail(orderId.value)
+    await loadReviewState()
   } catch (error) {
     ElMessage.error(error.message || '订单详情加载失败')
   } finally {
@@ -54,12 +89,15 @@ async function loadOrderDetail() {
 
 function goPay() {
   if (!orderDetail.value) return
+  router.push(`/payment/${orderDetail.value.id}`)
+}
+
+function goReview() {
+  if (!orderDetail.value?.id) return
   router.push({
-    path: '/pay',
+    path: '/order/review',
     query: {
       orderId: String(orderDetail.value.id),
-      goodsTitle: orderDetail.value.goodsTitle || '',
-      amount: String(orderDetail.value.amount || ''),
     },
   })
 }
@@ -105,7 +143,7 @@ onMounted(loadOrderDetail)
       <div class="head-copy">
         <p>ORDER DETAIL</p>
         <h1>订单详情</h1>
-        <span>这里展示订单的真实详情信息，包括金额、见面时间、联系人和当前订单状态。</span>
+        <span>展示当前订单的完整信息，包括金额、见面时间、联系人与订单状态。</span>
       </div>
       <el-tag round type="success">已接入</el-tag>
     </section>
@@ -148,14 +186,17 @@ onMounted(loadOrderDetail)
               <el-descriptions-item label="支付时间">{{ formatDateTime(orderDetail.payTime) }}</el-descriptions-item>
               <el-descriptions-item label="关闭时间">{{ formatDateTime(orderDetail.closeTime) }}</el-descriptions-item>
               <el-descriptions-item label="完成时间">{{ formatDateTime(orderDetail.completeTime) }}</el-descriptions-item>
-              <el-descriptions-item label="备注说明" :span="2">{{ orderDetail.remark || '无' }}</el-descriptions-item>
+              <el-descriptions-item label="备注说明" :span="2">{{ orderDetail.remark || '-' }}</el-descriptions-item>
             </el-descriptions>
 
             <div class="action-row">
-              <el-button @click="router.push('/my-order')">返回订单中心</el-button>
+              <el-button @click="router.push('/user/bought')">返回订单中心</el-button>
               <el-button v-if="orderDetail.status === 0" type="primary" @click="goPay">去支付</el-button>
               <el-button v-if="orderDetail.status === 0" danger plain @click="handleCancel">取消订单</el-button>
               <el-button v-if="orderDetail.status === 1" type="success" @click="handleComplete">确认完成</el-button>
+              <el-button v-if="canOpenReview" type="primary" plain @click="goReview">
+                {{ isBuyer ? (reviewExists ? '查看评价' : '去评价') : '查看评价' }}
+              </el-button>
             </div>
           </template>
         </el-card>
@@ -173,15 +214,15 @@ onMounted(loadOrderDetail)
           <ol class="step-list">
             <li>
               <strong>详情已接入</strong>
-              <span>订单主信息、快照信息和买卖双方联系方式都来自后端接口。</span>
+              <span>订单主信息、快照信息和买卖双方联系方式均来自后端接口。</span>
             </li>
             <li>
               <strong>状态操作已接入</strong>
-              <span>待支付订单可以继续支付或取消，已支付订单可以确认完成。</span>
+              <span>待支付订单可继续支付或取消，已支付订单可确认完成。</span>
             </li>
             <li>
-              <strong>保持真实链路</strong>
-              <span>这里不会展示假数据，页面行为完全跟随后端订单状态变化。</span>
+              <strong>评价链路已接入</strong>
+              <span>已完成订单的买家可发起评价，且每个订单仅允许一次。</span>
             </li>
           </ol>
         </el-card>
@@ -191,7 +232,7 @@ onMounted(loadOrderDetail)
           type="info"
           :closable="false"
           show-icon
-          description="如果管理员在后台修改了当前订单状态，刷新本页后也会同步看到最新结果。"
+          description="如果管理员在后台修改了当前订单状态，刷新本页后会同步看到最新结果。"
         />
       </aside>
     </div>

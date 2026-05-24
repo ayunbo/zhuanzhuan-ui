@@ -16,6 +16,8 @@ import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { recordBrowseHistory } from '@/api/history'
+import { getGoodsReviewPage } from '@/api/review'
 import request, { AUTH_CHANGED_EVENT, ensureLoggedIn, isLoggedIn } from '@/utils/request'
 
 const route = useRoute()
@@ -27,6 +29,15 @@ const favoriteLoading = ref(false)
 const isFavorited = ref(false)
 const reportDialogVisible = ref(false)
 const reportSubmitting = ref(false)
+const browseRecordLoading = ref(false)
+const reviewsLoading = ref(false)
+const reviewRecords = ref([])
+
+const reviewPager = reactive({
+  page: 1,
+  pageSize: 5,
+  total: 0,
+})
 
 const detail = reactive({
   id: null,
@@ -112,20 +123,21 @@ const sellerScoreLabel = computed(() => {
   return score.toFixed(1)
 })
 const publishTimeLabel = computed(() => formatDateTime(detail.publishTime))
+const reviewPageLabel = computed(() => `第 ${reviewPager.page} 页 / 共 ${Math.max(1, Math.ceil(reviewPager.total / reviewPager.pageSize))} 页`)
 const detailLines = computed(() =>
   detail.detail
     ? detail.detail.split(/\r?\n/).filter((line) => line.trim())
-    : ['卖家暂未补充更多描述。'],
+    : ['卖家暂未补充更多商品描述。'],
 )
 const isOnSale = computed(() => Number(detail.status) === 3)
 const isSold = computed(() => Number(detail.status) === 5)
 const buyButtonText = computed(() => {
   if (isSold.value) {
-    return '已卖掉'
+    return '已售出'
   }
 
   if (!isOnSale.value) {
-    return detail.statusDesc || '暂不可买'
+    return detail.statusDesc || '暂不可购买'
   }
 
   return '立即购买'
@@ -148,11 +160,11 @@ function getErrorMessage(error, fallback) {
 
 function mapQualityLabel(value) {
   const qualityMap = {
-    1: '明显使用痕迹',
+    1: '成色较差',
     2: '成色一般',
-    3: '成色不错',
-    4: '成色很好',
-    5: '几乎全新',
+    3: '成色良好',
+    4: '成色很新',
+    5: '近乎全新',
   }
 
   return qualityMap[value] || '成色未知'
@@ -184,6 +196,42 @@ function formatDateTime(value) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date)
+}
+
+function parseImageUrls(images) {
+  if (!images) {
+    return []
+  }
+
+  return String(images)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function getReviewImages(review) {
+  return parseImageUrls(review?.images)
+}
+
+function getReviewerName(review) {
+  if (review?.reviewerName) {
+    return review.reviewerName
+  }
+  return review?.anonymous === 1 ? '匿名买家' : '买家'
+}
+
+function reviewLevelText(score) {
+  const value = Number(score || 0)
+  if (value >= 5) return '好评'
+  if (value >= 3) return '中评'
+  return '差评'
+}
+
+function reviewLevelClass(score) {
+  const value = Number(score || 0)
+  if (value >= 5) return 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200'
+  if (value >= 3) return 'bg-amber-50 text-amber-600 ring-1 ring-amber-200'
+  return 'bg-rose-50 text-rose-600 ring-1 ring-rose-200'
 }
 
 function applyDetail(data = {}) {
@@ -229,11 +277,49 @@ async function fetchDetail() {
 
     applyDetail(data.data)
     selectedImageIndex.value = 0
-    await syncFavoriteStatus()
+    await Promise.all([recordCurrentBrowseHistory(), syncFavoriteStatus(), loadGoodsReviews()])
   } catch (error) {
     showToast(getErrorMessage(error, '商品详情加载失败'), 'error')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadGoodsReviews() {
+  if (!detail.id) {
+    reviewRecords.value = []
+    reviewPager.total = 0
+    return
+  }
+
+  reviewsLoading.value = true
+  try {
+    const data = await getGoodsReviewPage(detail.id, {
+      page: reviewPager.page,
+      pageSize: reviewPager.pageSize,
+    })
+    reviewRecords.value = Array.isArray(data?.records) ? data.records : []
+    reviewPager.total = Number(data?.total || 0)
+  } catch (error) {
+    reviewPager.total = 0
+    showToast(getErrorMessage(error, '商品评价加载失败'), 'error')
+  } finally {
+    reviewsLoading.value = false
+  }
+}
+
+async function recordCurrentBrowseHistory() {
+  if (!detail.id || !isLoggedIn() || browseRecordLoading.value) {
+    return
+  }
+
+  browseRecordLoading.value = true
+  try {
+    await recordBrowseHistory(detail.id)
+  } catch {
+    // Ignore history write failures so they do not block the detail page.
+  } finally {
+    browseRecordLoading.value = false
   }
 }
 
@@ -285,7 +371,7 @@ function handleBuyNow() {
     return
   }
   if (!isOnSale.value) {
-    showToast(isSold.value ? '商品已卖掉' : detail.statusDesc || '当前商品暂不可购买', 'error')
+    showToast(isSold.value ? '商品已售出' : detail.statusDesc || '当前商品暂不可购买', 'error')
     return
   }
   if (!detail.id) {
@@ -308,7 +394,7 @@ function handleFavorite() {
 
     try {
       const method = isFavorited.value ? 'delete' : 'post'
-      const actionText = isFavorited.value ? '取消收藏' : '收藏'
+      const actionText = isFavorited.value ? '取消收藏' : '加入收藏'
       const { data } = await request[method](`/user/favorites/${detail.id}`)
 
       if (data?.code !== 1) {
@@ -317,9 +403,9 @@ function handleFavorite() {
 
       isFavorited.value = Boolean(data.data?.favorited)
       detail.favoriteCount = Number(data.data?.favoriteCount ?? detail.favoriteCount ?? 0)
-      showToast(isFavorited.value ? '已收藏' : '已取消收藏')
+      showToast(isFavorited.value ? '已加入收藏' : '已取消收藏')
     } catch (error) {
-      showToast(getErrorMessage(error, isFavorited.value ? '取消收藏失败' : '收藏失败'), 'error')
+      showToast(getErrorMessage(error, isFavorited.value ? '取消收藏失败' : '加入收藏失败'), 'error')
     } finally {
       favoriteLoading.value = false
     }
@@ -393,9 +479,23 @@ function handleAuthChanged() {
   syncFavoriteStatus()
 }
 
+function changeReviewPage(step) {
+  const nextPage = reviewPager.page + step
+  const maxPage = Math.max(1, Math.ceil(reviewPager.total / reviewPager.pageSize))
+
+  if (nextPage < 1 || nextPage > maxPage || nextPage === reviewPager.page) {
+    return
+  }
+
+  reviewPager.page = nextPage
+  loadGoodsReviews()
+}
+
 watch(
   () => route.params.id,
   () => {
+    reviewPager.page = 1
+    reviewPager.total = 0
     fetchDetail()
   },
 )
@@ -435,7 +535,7 @@ onBeforeUnmount(() => {
             <Avatar
               size="lg"
               :src="detail.sellerAvatar"
-              :fallback="detail.sellerName?.slice(0, 1) || '卖'"
+              :fallback="detail.sellerName?.slice(0, 1) || 'S'"
             />
             <div class="min-w-0 space-y-1">
               <div class="flex flex-wrap items-center gap-2">
@@ -448,7 +548,7 @@ onBeforeUnmount(() => {
                 </Badge>
               </div>
               <div class="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                <span>{{ detail.sellerCampus || '校园内卖家' }}</span>
+                <span>{{ detail.sellerCampus || '校内卖家' }}</span>
                 <span>累计评价 {{ detail.sellerReviewCount || 0 }}</span>
               </div>
             </div>
@@ -504,7 +604,7 @@ onBeforeUnmount(() => {
                 <div
                   class="-rotate-12 rounded-full border-4 border-white/90 px-9 py-4 text-3xl font-black tracking-[0.18em] text-white shadow-[0_14px_40px_-18px_rgba(15,23,42,0.5)]"
                 >
-                  卖掉了
+                  已售出
                 </div>
               </div>
             </div>
@@ -517,10 +617,10 @@ onBeforeUnmount(() => {
                   <div class="space-y-2">
                     <div class="flex flex-wrap items-center gap-2">
                       <p class="text-4xl font-black tracking-tight text-brand-500">
-                        ¥{{ formatPrice(detail.price) }}
+                        ￥{{ formatPrice(detail.price) }}
                       </p>
                       <p v-if="detail.oldPrice" class="text-base text-slate-400 line-through">
-                        ¥{{ formatPrice(detail.oldPrice) }}
+                        ￥{{ formatPrice(detail.oldPrice) }}
                       </p>
                     </div>
                   </div>
@@ -528,7 +628,7 @@ onBeforeUnmount(() => {
                   <div class="shrink-0 text-right">
                     <p class="text-sm font-semibold text-slate-900">{{ qualityLabel }}</p>
                     <p class="mt-2 text-sm text-slate-400">
-                      {{ detail.favoriteCount || 0 }}人收藏 | {{ detail.viewCount || 0 }}浏览
+                      {{ detail.favoriteCount || 0 }}人收藏 | {{ detail.viewCount || 0 }}次浏览
                     </p>
                   </div>
                 </div>
@@ -553,8 +653,8 @@ onBeforeUnmount(() => {
                 class="grid gap-3 rounded-[24px] border border-slate-100 bg-white p-4 text-sm text-slate-500"
               >
                 <div class="flex items-center justify-between gap-4">
-                  <span>面交地点</span>
-                  <span class="font-medium text-slate-700">{{ detail.location || '校园面交' }}</span>
+                  <span>交易地点</span>
+                  <span class="font-medium text-slate-700">{{ detail.location || '校内当面交易' }}</span>
                 </div>
                 <div class="flex items-center justify-between gap-4">
                   <span>发布时间</span>
@@ -618,6 +718,130 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </div>
+        </div>
+      </Card>
+
+      <Card class="border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
+        <div class="flex flex-col gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
+          <div class="space-y-1">
+            <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">买家评价</p>
+            <h2 class="text-2xl font-black tracking-tight text-slate-950">商品评价</h2>
+            <p class="text-sm text-slate-500">
+              这里展示的是该商品已完成订单的买家评价，默认按最新时间排序。
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <Badge variant="outline">共 {{ reviewPager.total || 0 }} 条</Badge>
+            <Badge variant="success">卖家累计 {{ detail.sellerReviewCount || 0 }} 条</Badge>
+          </div>
+        </div>
+
+        <div v-if="reviewsLoading" class="flex min-h-[220px] items-center justify-center">
+          <div
+            class="inline-flex items-center gap-3 rounded-full bg-slate-100 px-5 py-2.5 text-sm font-medium text-slate-500"
+          >
+            <LoaderCircle class="h-4 w-4 animate-spin" />
+            正在加载商品评价
+          </div>
+        </div>
+
+        <div v-else-if="reviewRecords.length" class="space-y-4 pt-5">
+          <article
+            v-for="review in reviewRecords"
+            :key="review.id"
+            class="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.32)] sm:p-5"
+          >
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div class="flex min-w-0 items-center gap-3">
+                <Avatar
+                  size="lg"
+                  :src="review.reviewerAvatar"
+                  :fallback="getReviewerName(review).slice(0, 1)"
+                />
+                <div class="min-w-0 space-y-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="truncate text-sm font-bold text-slate-900">
+                      {{ getReviewerName(review) }}
+                    </p>
+                    <span
+                      class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold"
+                      :class="reviewLevelClass(review.score)"
+                    >
+                      {{ reviewLevelText(review.score) }}
+                    </span>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-1 text-slate-400">
+                    <Star
+                      v-for="starIndex in 5"
+                      :key="`${review.id}-${starIndex}`"
+                      class="h-4 w-4"
+                      :class="starIndex <= Number(review.score || 0) ? 'fill-amber-400 text-amber-400' : 'text-slate-300'"
+                    />
+                    <span class="ml-1 text-xs font-medium text-slate-500">{{ Number(review.score || 0).toFixed(1) }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <p class="shrink-0 text-xs text-slate-400">
+                {{ formatDateTime(review.createTime) }}
+              </p>
+            </div>
+
+            <p class="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-700">
+              {{ review.content || '该买家未填写文字评价。' }}
+            </p>
+
+            <div
+              v-if="getReviewImages(review).length"
+              class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+            >
+              <div
+                v-for="(image, imageIndex) in getReviewImages(review)"
+                :key="`${review.id}-image-${imageIndex}`"
+                class="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+              >
+                <img
+                  :src="image"
+                  :alt="`${getReviewerName(review)}的评价图片${imageIndex + 1}`"
+                  class="h-28 w-full object-cover"
+                />
+              </div>
+            </div>
+          </article>
+
+          <div
+            v-if="reviewPager.total > reviewPager.pageSize"
+            class="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p class="text-sm text-slate-500">{{ reviewPageLabel }}</p>
+            <div class="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                :disabled="reviewPager.page <= 1 || reviewsLoading"
+                @click="changeReviewPage(-1)"
+              >
+                上一页
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                :disabled="reviewPager.page >= Math.max(1, Math.ceil(reviewPager.total / reviewPager.pageSize)) || reviewsLoading"
+                @click="changeReviewPage(1)"
+              >
+                下一页
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="flex min-h-[220px] flex-col items-center justify-center gap-3 text-center">
+          <div class="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-500">
+            暂无评价
+          </div>
+          <p class="max-w-md text-sm leading-6 text-slate-500">
+            该商品暂时还没有买家评价，完成交易后的评价会显示在这里。
+          </p>
         </div>
       </Card>
     </div>

@@ -112,6 +112,10 @@ function showToast(message, type = 'success') {
   }, 2600)
 }
 
+function getErrorMessage(error, fallback) {
+  return error?.response?.data?.msg || error?.message || fallback
+}
+
 function resetErrors() {
   Object.keys(errors).forEach((key) => {
     errors[key] = ''
@@ -215,7 +219,7 @@ async function fetchCategories() {
     categories.value = Array.isArray(data.data) ? data.data : []
     syncCategoryIndexes()
   } catch (error) {
-    showToast(error.message || '分类加载失败', 'error')
+    showToast(getErrorMessage(error, '分类加载失败'), 'error')
   } finally {
     loadingCategories.value = false
   }
@@ -234,7 +238,7 @@ async function fetchGoodsDetail(goodsId) {
 
     applyGoodsDetail(data.data)
   } catch (error) {
-    showToast(error.message || '商品详情加载失败', 'error')
+    showToast(getErrorMessage(error, '商品详情加载失败'), 'error')
   }
 }
 
@@ -315,7 +319,7 @@ async function handleFilesChange(event) {
     form.imageUrls.push(...uploadedUrls)
     showToast('图片上传成功')
   } catch (error) {
-    showToast(error.message || '图片上传失败', 'error')
+    showToast(getErrorMessage(error, '图片上传失败'), 'error')
   } finally {
     uploadingImages.value = false
   }
@@ -360,7 +364,7 @@ async function handleSaveDraft() {
     await saveDraftInternal()
     showToast('草稿保存成功')
   } catch (error) {
-    showToast(error.message || '草稿保存失败', 'error')
+    showToast(getErrorMessage(error, '草稿保存失败'), 'error')
   } finally {
     savingDraft.value = false
   }
@@ -387,7 +391,7 @@ async function handleSubmitAudit() {
 
     showToast('提交审核成功')
   } catch (error) {
-    showToast(error.message || '提交审核失败', 'error')
+    showToast(getErrorMessage(error, '提交审核失败'), 'error')
   } finally {
     submittingAudit.value = false
   }

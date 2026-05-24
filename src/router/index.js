@@ -66,6 +66,30 @@ const router = createRouter({
       component: () => import('../views/PaymentView.vue'),
     },
     {
+      path: '/order/detail/:id',
+      name: 'order-detail',
+      meta: {
+        showNavbarSearch: false,
+      },
+      component: () => import('../views/OrderDetailView.vue'),
+    },
+    {
+      path: '/order/review',
+      name: 'order-review',
+      meta: {
+        showNavbarSearch: false,
+      },
+      component: () => import('../views/ReviewCreateView.vue'),
+    },
+    {
+      path: '/history',
+      name: 'browse-history',
+      meta: {
+        showNavbarSearch: false,
+      },
+      component: () => import('../views/BrowseHistoryView.vue'),
+    },
+    {
       path: '/seller/:id',
       name: 'seller-profile',
       component: () => import('../views/SellerProfileView.vue'),

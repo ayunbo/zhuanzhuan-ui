@@ -55,6 +55,10 @@ const pendingReviewText = computed(() => {
   return '你没有权限查看该订单评价。'
 })
 
+function getErrorMessage(error, fallback) {
+  return error?.response?.data?.msg || error?.message || fallback
+}
+
 function statusText(status) {
   const map = {
     0: '待支付',
@@ -77,7 +81,7 @@ function parseImageUrls(images) {
 async function loadPageData() {
   if (!orderId.value) {
     ElMessage.warning('缺少订单编号')
-    router.replace('/my-order')
+    router.replace('/user/bought')
     return
   }
 
@@ -90,7 +94,7 @@ async function loadPageData() {
       existingReview.value = null
     }
   } catch (error) {
-    ElMessage.error(error.message || '加载订单信息失败')
+    ElMessage.error(getErrorMessage(error, '加载订单信息失败'))
   } finally {
     loading.value = false
   }
@@ -101,7 +105,7 @@ function goBack() {
     router.push(`/order/detail/${orderId.value}`)
     return
   }
-  router.push('/my-order')
+  router.push('/user/bought')
 }
 
 function beforeImageUpload(file) {
@@ -129,7 +133,7 @@ async function handleImageUpload(options) {
     ElMessage.success('图片上传成功')
   } catch (error) {
     options.onError(error)
-    ElMessage.error(error.message || '图片上传失败')
+    ElMessage.error(getErrorMessage(error, '图片上传失败'))
   } finally {
     imageUploading.value = false
   }
@@ -160,11 +164,11 @@ async function handleSubmit() {
       images: reviewImages.value.join(',') || null,
       anonymous: form.anonymous ? 1 : 0,
     })
+    existingReview.value = await getOrderReview(orderId.value)
+    reviewImages.value = []
     ElMessage.success('评价提交成功')
-    router.replace(`/order/detail/${orderId.value}`)
   } catch (error) {
-    const message = error?.message || (typeof error === 'string' ? error : '')
-    ElMessage.error(message || '评价提交失败')
+    ElMessage.error(getErrorMessage(error, '评价提交失败'))
   } finally {
     submitting.value = false
   }

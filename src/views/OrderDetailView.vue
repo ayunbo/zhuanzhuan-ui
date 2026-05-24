@@ -72,7 +72,7 @@ async function loadReviewState() {
 async function loadOrderDetail() {
   if (!orderId.value) {
     ElMessage.warning('缺少订单编号')
-    router.replace('/my-order')
+    router.replace('/user/bought')
     return
   }
 
@@ -89,14 +89,7 @@ async function loadOrderDetail() {
 
 function goPay() {
   if (!orderDetail.value) return
-  router.push({
-    path: '/pay',
-    query: {
-      orderId: String(orderDetail.value.id),
-      goodsTitle: orderDetail.value.goodsTitle || '',
-      amount: String(orderDetail.value.amount || ''),
-    },
-  })
+  router.push(`/payment/${orderDetail.value.id}`)
 }
 
 function goReview() {
@@ -197,7 +190,7 @@ onMounted(loadOrderDetail)
             </el-descriptions>
 
             <div class="action-row">
-              <el-button @click="router.push('/my-order')">返回订单中心</el-button>
+              <el-button @click="router.push('/user/bought')">返回订单中心</el-button>
               <el-button v-if="orderDetail.status === 0" type="primary" @click="goPay">去支付</el-button>
               <el-button v-if="orderDetail.status === 0" danger plain @click="handleCancel">取消订单</el-button>
               <el-button v-if="orderDetail.status === 1" type="success" @click="handleComplete">确认完成</el-button>

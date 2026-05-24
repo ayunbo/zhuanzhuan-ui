@@ -32,12 +32,19 @@ const page = ref(1)
 const total = ref(0)
 const orders = ref([])
 const activeStatus = ref('all')
+const complaintDialogVisible = ref(false)
+const complaintSubmitting = ref(false)
+const complaintOrder = ref(null)
 
 const sellerAvatarMap = reactive({})
 const toast = reactive({
   visible: false,
   type: 'success',
   message: '',
+})
+const complaintForm = reactive({
+  reasonType: '卖家未按约定交易',
+  description: '',
 })
 
 const statusTabs = [
@@ -47,6 +54,13 @@ const statusTabs = [
   { key: '2', label: '交易成功', status: 2 },
   { key: '3', label: '已取消', status: 3 },
   { key: '4', label: '超时关闭', status: 4 },
+]
+
+const complaintReasonOptions = [
+  '卖家未按约定交易',
+  '商品与描述不符',
+  '售后沟通不友好',
+  '疑似欺诈或违规交易',
 ]
 
 const totalPages = computed(() => {
@@ -350,18 +364,57 @@ async function completeOrder(order) {
   }
 }
 
-async function reportSeller(order) {
+function reportSeller(order) {
   if (!order?.sellerId) {
     showToast('卖家信息缺失，暂时无法投诉', 'error')
     return
   }
 
+  complaintOrder.value = order
+  complaintForm.reasonType = '卖家未按约定交易'
+  complaintForm.description = ''
+  complaintDialogVisible.value = true
+}
+
+function closeComplaintDialog() {
+  if (complaintSubmitting.value) {
+    return
+  }
+
+  complaintDialogVisible.value = false
+  complaintOrder.value = null
+  complaintForm.description = ''
+}
+
+function buildComplaintReason() {
+  const description = complaintForm.description.trim()
+  const order = complaintOrder.value
+  const orderText = order?.orderNo || order?.id || ''
+  const reason = description
+    ? `${complaintForm.reasonType}：${description}`
+    : complaintForm.reasonType
+
+  return orderText ? `订单投诉 ${orderText}：${reason}` : reason
+}
+
+async function submitComplaint() {
+  const order = complaintOrder.value
+  if (!order?.sellerId) {
+    showToast('卖家信息缺失，暂时无法投诉', 'error')
+    return
+  }
+  if (!complaintForm.reasonType && !complaintForm.description.trim()) {
+    showToast('请选择或填写投诉原因', 'error')
+    return
+  }
+
+  complaintSubmitting.value = true
   actionLoadingId.value = `report-${order.id}`
   try {
     const { data } = await request.post('/user/report', {
       targetType: 2,
       targetId: order.sellerId,
-      reason: `订单投诉：${order.orderNo || order.id}`,
+      reason: buildComplaintReason(),
     })
 
     if (data?.code !== 1) {
@@ -369,9 +422,13 @@ async function reportSeller(order) {
     }
 
     showToast('投诉已提交')
+    complaintDialogVisible.value = false
+    complaintOrder.value = null
+    complaintForm.description = ''
   } catch (error) {
     showToast(getErrorMessage(error, '投诉提交失败'), 'error')
   } finally {
+    complaintSubmitting.value = false
     actionLoadingId.value = null
   }
 }
@@ -750,6 +807,98 @@ onMounted(() => {
         </Button>
       </div>
     </Card>
+
+    <div
+      v-if="complaintDialogVisible"
+      class="fixed inset-0 z-[170] flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm"
+      @click.self="closeComplaintDialog"
+    >
+      <section class="w-full max-w-xl overflow-hidden rounded-[28px] bg-white shadow-[0_30px_80px_-38px_rgba(15,23,42,0.75)]">
+        <div class="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+          <div>
+            <p class="text-xs font-semibold text-rose-500">投诉卖家</p>
+            <h2 class="mt-1 text-xl font-black text-slate-950">
+              {{ complaintOrder?.sellerName || '校园卖家' }}
+            </h2>
+            <p class="mt-1 text-sm text-slate-400">
+              订单号 {{ complaintOrder?.orderNo || complaintOrder?.id || '-' }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-400 transition hover:border-slate-300 hover:text-slate-700"
+            :disabled="complaintSubmitting"
+            @click="closeComplaintDialog"
+          >
+            ×
+          </button>
+        </div>
+
+        <div class="space-y-5 px-6 py-5">
+          <div class="space-y-3">
+            <p class="text-sm font-semibold text-slate-800">选择投诉原因</p>
+            <div class="grid gap-2 sm:grid-cols-2">
+              <button
+                v-for="option in complaintReasonOptions"
+                :key="option"
+                type="button"
+                class="flex items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition"
+                :class="
+                  complaintForm.reasonType === option
+                    ? 'border-rose-300 bg-rose-50 text-rose-600'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-rose-200 hover:bg-rose-50/60'
+                "
+                :disabled="complaintSubmitting"
+                @click="complaintForm.reasonType = option"
+              >
+                <span
+                  class="h-2.5 w-2.5 rounded-full"
+                  :class="complaintForm.reasonType === option ? 'bg-rose-500' : 'bg-slate-200'"
+                />
+                {{ option }}
+              </button>
+            </div>
+          </div>
+
+          <label class="block space-y-2">
+            <span class="text-sm font-semibold text-slate-800">补充说明</span>
+            <textarea
+              v-model="complaintForm.description"
+              class="min-h-28 w-full resize-none rounded-[22px] border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-rose-300 focus:ring-4 focus:ring-rose-100"
+              maxlength="160"
+              placeholder="可以补充交易经过、沟通问题或其他证据说明"
+              :disabled="complaintSubmitting"
+            />
+            <span class="block text-right text-xs text-slate-400">
+              {{ complaintForm.description.length }}/160
+            </span>
+          </label>
+
+          <div class="rounded-2xl bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-500">
+            投诉会提交到平台举报处理中心，管理员可查看订单对应卖家信息并进行处理。
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4">
+          <Button
+            variant="outline"
+            class="rounded-full border-slate-200 text-slate-600 hover:bg-slate-50"
+            :disabled="complaintSubmitting"
+            @click="closeComplaintDialog"
+          >
+            取消
+          </Button>
+          <Button
+            class="rounded-full bg-rose-500 text-white hover:bg-rose-600"
+            :disabled="complaintSubmitting"
+            @click="submitComplaint"
+          >
+            <LoaderCircle v-if="complaintSubmitting" class="mr-2 h-4 w-4 animate-spin" />
+            {{ complaintSubmitting ? '提交中' : '提交投诉' }}
+          </Button>
+        </div>
+      </section>
+    </div>
 
     <transition
       enter-active-class="transition duration-200"

@@ -20,7 +20,14 @@ import {
   submitSellerAuth,
   uploadUserFile,
 } from '@/api/user'
-import { OSS_UPLOAD_CATEGORY } from '@/constants/upload'
+import {
+  ALLOWED_IMAGE_MIME_TYPES,
+  ALLOWED_IMAGE_SUFFIXES,
+  IMAGE_UPLOAD_ACCEPT,
+  OSS_UPLOAD_CATEGORY,
+  UPLOAD_MAX_FILE_COUNT,
+  UPLOAD_MAX_SIZE_MB,
+} from '@/constants/upload'
 import { formatDateTime } from '@/utils/format'
 
 const router = useRouter()
@@ -50,38 +57,38 @@ const statusMeta = computed(() => {
       return {
         tone: 'warning',
         icon: InfoFilled,
-        title: '认证待校验',
-        desc: '材料已提交，等待校验结果。',
-        badge: '待审',
+        title: '审核中',
+        desc: '认证资料已提交，正在等待审核。',
+        badge: '待审核',
       }
     case 1:
       return {
         tone: 'success',
         icon: CircleCheck,
-        title: '认证已通过',
-        desc: '可以直接进入商品管理。',
+        title: '已通过',
+        desc: '你现在可以直接进入商品管理页面。',
         badge: '已通过',
       }
     case 2:
       return {
         tone: 'danger',
         icon: WarnTriangleFilled,
-        title: '认证被驳回',
-        desc: authResult.value?.reason ? `原因：${authResult.value.reason}` : '材料需补充后重新提交。',
-        badge: '需重提',
+        title: '已驳回',
+        desc: authResult.value?.reason ? `驳回原因：${authResult.value.reason}` : '请补充完整资料后重新提交。',
+        badge: '重新提交',
       }
     default:
       return {
         tone: 'info',
         icon: Stamp,
         title: '卖家认证',
-        desc: '填写实名信息并上传材料。',
+        desc: '填写真实信息并上传认证材料后即可提交审核。',
         badge: '未提交',
       }
   }
 })
 
-const submitButtonText = computed(() => (isRejected.value ? '重新提交' : '提交认证'))
+const submitButtonText = computed(() => (isRejected.value ? '重新提交认证' : '提交认证'))
 
 async function loadData() {
   loadingResult.value = true
@@ -97,22 +104,24 @@ async function loadData() {
     authResult.value = result
     form.material = result?.material || form.material || ''
   } catch (error) {
-    ElMessage.error(error.message || '认证信息加载失败')
+    ElMessage.error(error.message || '加载认证信息失败')
   } finally {
     loadingResult.value = false
   }
 }
 
 function beforeMaterialUpload(file) {
-  const isImage = typeof file.type === 'string' && file.type.startsWith('image/')
-  if (!isImage) {
-    ElMessage.warning('仅支持图片文件')
+  const suffix = typeof file?.name === 'string' ? file.name.split('.').pop()?.trim().toLowerCase() || '' : ''
+  const mimeType = typeof file?.type === 'string' ? file.type.trim().toLowerCase() : ''
+  const isAllowedImage = ALLOWED_IMAGE_SUFFIXES.includes(suffix) && ALLOWED_IMAGE_MIME_TYPES.includes(mimeType)
+  if (!isAllowedImage) {
+    ElMessage.warning('仅支持 jpg/jpeg/png/webp/gif 格式图片')
     return false
   }
 
-  const isLt5m = file.size / 1024 / 1024 < 5
+  const isLt5m = Number(file?.size || 0) <= UPLOAD_MAX_SIZE_MB * 1024 * 1024
   if (!isLt5m) {
-    ElMessage.warning('单张图片不能超过 5MB')
+    ElMessage.warning(`图片大小不能超过 ${UPLOAD_MAX_SIZE_MB}MB`)
     return false
   }
 
@@ -137,7 +146,7 @@ async function handleMaterialUpload(options) {
 async function handleSubmit() {
   const phoneValid = /^1\d{10}$/.test(form.phone.trim())
   if (!form.realName.trim() || !form.studentNo.trim() || !form.phone.trim() || !form.material || !phoneValid) {
-    ElMessage.warning('请补全姓名、学号、手机号和材料')
+    ElMessage.warning('请完善真实姓名、学号、手机号和认证材料')
     return
   }
 
@@ -162,9 +171,9 @@ async function handleCheckPortal() {
   checkingPortal.value = true
   try {
     await fetchSellerPortal()
-    ElMessage.success('门户校验通过')
+    ElMessage.success('卖家入口校验通过')
   } catch (error) {
-    ElMessage.error(error.message || '当前账号暂未开通卖家门户')
+    ElMessage.error(error.message || '当前账号尚未开通卖家入口')
   } finally {
     checkingPortal.value = false
   }
@@ -181,14 +190,14 @@ onMounted(() => loadData())
   <div class="seller-auth-page zz-page">
     <section class="page-head zz-white-panel">
       <div class="page-head__copy">
-        <p>SELLER AUTH</p>
+        <p>SELLER CENTER</p>
         <h1>卖家认证</h1>
       </div>
 
       <div class="page-head__actions">
-        <el-button :icon="Refresh" :loading="loadingResult" @click="loadData">刷新</el-button>
+        <el-button :icon="Refresh" :loading="loadingResult" @click="loadData">刷新状态</el-button>
         <el-button type="primary" :icon="Promotion" :loading="checkingPortal" @click="handleCheckPortal">
-          校验门户
+          校验卖家入口
         </el-button>
       </div>
     </section>
@@ -204,14 +213,14 @@ onMounted(() => loadData())
             <span>{{ statusMeta.badge }}</span>
           </div>
           <h3 class="side-title">{{ statusMeta.title }}</h3>
-          <p class="side-line">{{ form.realName || authResult?.realName || '姓名未填' }}</p>
-          <p class="side-line">{{ form.studentNo || authResult?.studentNo || '学号未填' }}</p>
-          <el-button type="primary" block :loading="checkingPortal" @click="handleCheckPortal">校验门户</el-button>
+          <p class="side-line">{{ form.realName || authResult?.realName || '未填写姓名' }}</p>
+          <p class="side-line">{{ form.studentNo || authResult?.studentNo || '未填写学号' }}</p>
+          <el-button type="primary" block :loading="checkingPortal" @click="handleCheckPortal">校验卖家入口</el-button>
         </el-card>
 
         <el-card class="side-card" shadow="never">
-          <div class="side-card__title">快速入口</div>
-          <el-button block @click="goGoodsManage">去发布闲置</el-button>
+          <div class="side-card__title">快捷入口</div>
+          <el-button block @click="goGoodsManage">前往发布商品</el-button>
         </el-card>
       </aside>
 
@@ -220,8 +229,8 @@ onMounted(() => loadData())
           <template #header>
             <div class="panel-header">
               <div>
-                <h2>认证申请</h2>
-                <p>实名、学号、手机号和材料都在这里处理。</p>
+                <h2>认证资料</h2>
+                <p>在这里填写真实姓名、学号、手机号，并上传认证材料。</p>
               </div>
               <el-tag :type="statusMeta.tone" round>{{ statusMeta.badge }}</el-tag>
             </div>
@@ -241,8 +250,8 @@ onMounted(() => loadData())
             </el-descriptions>
 
             <div class="state-actions">
-              <el-button type="primary" :loading="checkingPortal" @click="handleCheckPortal">校验门户</el-button>
-              <el-button @click="goGoodsManage">进入发布页</el-button>
+              <el-button type="primary" :loading="checkingPortal" @click="handleCheckPortal">校验卖家入口</el-button>
+              <el-button @click="goGoodsManage">打开商品发布页</el-button>
             </div>
           </div>
 
@@ -260,49 +269,52 @@ onMounted(() => loadData())
             </el-descriptions>
 
             <div class="state-actions">
-              <el-button type="primary" :loading="checkingPortal" @click="handleCheckPortal">校验门户</el-button>
+              <el-button type="primary" :loading="checkingPortal" @click="handleCheckPortal">校验卖家入口</el-button>
               <el-button :loading="loadingResult" @click="loadData">刷新结果</el-button>
             </div>
           </div>
 
           <div v-else-if="canEditForm" class="state-stack">
             <div v-if="isRejected" class="result-banner danger">
-              <strong>驳回原因</strong>
-              <span>{{ authResult?.reason || '材料需补充后重新提交。' }}</span>
+              <strong>审核未通过</strong>
+              <span>{{ authResult?.reason || '请补充完整资料后重新提交。' }}</span>
             </div>
 
             <el-form label-position="top" class="auth-form">
               <div class="form-grid">
                 <el-form-item label="真实姓名" required>
-                  <el-input v-model="form.realName" placeholder="输入真实姓名" />
+                  <el-input v-model="form.realName" placeholder="请输入真实姓名" />
                 </el-form-item>
 
                 <el-form-item label="学号" required>
-                  <el-input v-model="form.studentNo" placeholder="输入学号" />
+                  <el-input v-model="form.studentNo" placeholder="请输入学号" />
                 </el-form-item>
               </div>
 
               <el-form-item label="手机号" required>
-                <el-input v-model="form.phone" placeholder="用于接收校验结果" />
+                <el-input v-model="form.phone" placeholder="用于接收审核结果" />
               </el-form-item>
 
-              <el-form-item label="材料" required>
+              <el-form-item label="认证材料" required>
                 <el-upload
                   class="material-uploader"
                   drag
                   :http-request="handleMaterialUpload"
                   :show-file-list="false"
                   :before-upload="beforeMaterialUpload"
+                  :limit="UPLOAD_MAX_FILE_COUNT"
+                  :on-exceed="() => ElMessage.warning('一次只能上传 1 张图片')"
                   :disabled="uploadingMaterial"
+                  :accept="IMAGE_UPLOAD_ACCEPT"
                 >
                   <div v-if="form.material" class="preview-wrap">
-                    <img :src="form.material" alt="材料预览" />
+                    <img :src="form.material" alt="认证材料预览" />
                     <div class="mask">重新上传</div>
                   </div>
                   <template v-else>
                     <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-                    <div class="el-upload__text">拖拽或点击上传</div>
-                    <div class="upload-hint">学生证或校园卡正面，内容清晰。</div>
+                    <div class="el-upload__text">将图片拖到此处，或点击上传</div>
+                    <div class="upload-hint">请上传清晰的学生证或校园卡正面图片。</div>
                   </template>
                 </el-upload>
               </el-form-item>

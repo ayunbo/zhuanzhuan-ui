@@ -42,7 +42,7 @@ function normalizeImage(item) {
 
 function toPrice(value) {
   const num = Number(value)
-  return Number.isFinite(num) ? `¥${num.toFixed(2)}` : '¥--'
+  return Number.isFinite(num) ? `￥${num.toFixed(2)}` : '￥--'
 }
 
 const imageUrl = computed(() => normalizeImage(props.item))

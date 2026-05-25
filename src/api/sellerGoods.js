@@ -2,7 +2,7 @@ import request from '@/utils/request'
 
 export function createGoodsDraft(data) {
   return request({
-    url: '/user/seller/goods/draft',
+    url: '/user/seller/goods',
     method: 'post',
     data,
   })
@@ -10,7 +10,7 @@ export function createGoodsDraft(data) {
 
 export function updateGoodsDraft(id, data) {
   return request({
-    url: `/user/seller/goods/draft/${id}`,
+    url: `/user/seller/goods/${id}`,
     method: 'put',
     data,
   })
@@ -18,7 +18,7 @@ export function updateGoodsDraft(id, data) {
 
 export function submitGoodsAudit(id) {
   return request({
-    url: `/user/seller/goods/${id}/submit-audit`,
+    url: `/user/seller/goods/${id}/submit`,
     method: 'put',
   })
 }

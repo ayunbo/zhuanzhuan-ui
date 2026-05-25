@@ -1,5 +1,37 @@
 import request from '@/utils/request'
-import { OSS_UPLOAD_CATEGORY } from '@/constants/upload'
+import {
+  ALLOWED_IMAGE_MIME_TYPES,
+  ALLOWED_IMAGE_SUFFIXES,
+  OSS_UPLOAD_CATEGORY,
+  UPLOAD_MAX_SIZE_MB,
+} from '@/constants/upload'
+
+function resolveSuffix(filename) {
+  if (!filename || typeof filename !== 'string') {
+    return ''
+  }
+
+  const dotIndex = filename.lastIndexOf('.')
+  if (dotIndex < 0 || dotIndex === filename.length - 1) {
+    return ''
+  }
+
+  return filename.slice(dotIndex + 1).trim().toLowerCase()
+}
+
+function validateUploadFile(file) {
+  const suffix = resolveSuffix(file?.name)
+  const mimeType = typeof file?.type === 'string' ? file.type.trim().toLowerCase() : ''
+  const fileSize = Number(file?.size || 0)
+
+  if (!ALLOWED_IMAGE_SUFFIXES.includes(suffix) || !ALLOWED_IMAGE_MIME_TYPES.includes(mimeType)) {
+    throw new Error('仅支持 jpg/jpeg/png/webp/gif 格式图片')
+  }
+
+  if (fileSize > UPLOAD_MAX_SIZE_MB * 1024 * 1024) {
+    throw new Error(`图片大小不能超过 ${UPLOAD_MAX_SIZE_MB}MB`)
+  }
+}
 
 /**
  * 买家登录
@@ -114,6 +146,8 @@ export function fetchSellerPortal() {
  * 上传文件
  */
 export function uploadUserFile(file, category = OSS_UPLOAD_CATEGORY.COMMON) {
+  validateUploadFile(file)
+
   const formData = new FormData()
   formData.append('file', file)
 

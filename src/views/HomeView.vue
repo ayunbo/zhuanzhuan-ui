@@ -195,14 +195,6 @@ function getProductCategoryLabel(product) {
   return product.categoryName || '未分类'
 }
 
-function getProductRootId(product) {
-  if (!product.categoryId) {
-    return null
-  }
-
-  return categoryMap.value.get(product.categoryId)?.rootId || null
-}
-
 function openMegaMenu(categoryId) {
   activeMegaMenuId.value = categoryId
 }

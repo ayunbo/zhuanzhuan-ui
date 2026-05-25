@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -11,8 +11,10 @@ import {
   submitGoodsAudit,
   updateGoodsDraft,
 } from '@/api/sellerGoods'
+import { createGoodsStatusSocket } from '@/utils/goodsStatusSocket'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
 const loading = ref(false)
@@ -21,6 +23,8 @@ const dialogVisible = ref(false)
 const editingId = ref(null)
 const saving = ref(false)
 const records = ref([])
+let goodsStatusSocket = null
+let refreshTimer = null
 
 const pager = reactive({
   page: 1,
@@ -38,7 +42,7 @@ const form = reactive({
   detail: '',
   price: '',
   oldPrice: '',
-  quality: 9,
+  quality: 5,
   location: '',
   cover: '',
 })
@@ -52,7 +56,7 @@ const GOODS_STATUS_LABEL_MAP = {
   1: '待审核',
   2: '已驳回',
   3: '在售',
-  4: '已锁定',
+  4: '锁定',
   5: '已售出',
   6: '已下架',
 }
@@ -89,7 +93,7 @@ function resetForm() {
   form.detail = ''
   form.price = ''
   form.oldPrice = ''
-  form.quality = 9
+  form.quality = 5
   form.location = ''
   form.cover = ''
 }
@@ -100,7 +104,7 @@ function fillForm(record) {
   form.detail = record.detail ?? ''
   form.price = record.price ?? ''
   form.oldPrice = record.oldPrice ?? ''
-  form.quality = record.quality ?? 9
+  form.quality = record.quality ?? 5
   form.location = record.location ?? ''
   form.cover = record.cover ?? ''
 }
@@ -118,22 +122,69 @@ function buildQueryParams() {
 
 async function fetchPage() {
   if (!isSeller.value) return
+
   loading.value = true
   try {
     const pageData = await getSellerGoodsPage(buildQueryParams())
     records.value = Array.isArray(pageData?.records) ? pageData.records : []
     pager.total = Number(pageData?.total || 0)
   } catch (error) {
-    ElMessage.error(error.message || '加载失败')
+    ElMessage.error(error.message || '加载商品列表失败')
   } finally {
     loading.value = false
   }
+}
+
+function scheduleRefresh() {
+  if (refreshTimer) {
+    window.clearTimeout(refreshTimer)
+  }
+  refreshTimer = window.setTimeout(() => {
+    fetchPage()
+  }, 120)
+}
+
+function connectGoodsStatusSocket() {
+  if (!authStore.isLoggedIn) {
+    return
+  }
+
+  goodsStatusSocket?.close()
+  goodsStatusSocket = createGoodsStatusSocket({
+    onMessage(payload) {
+      if (payload?.type !== 'goods-status') {
+        return
+      }
+
+      const exists = records.value.some((item) => String(item.id) === String(payload.goodsId))
+      if (exists || queryForm.status !== '' || loading.value) {
+        scheduleRefresh()
+      }
+    },
+  })
+  goodsStatusSocket.connect()
 }
 
 function openCreateDialog() {
   editingId.value = null
   resetForm()
   dialogVisible.value = true
+}
+
+function tryOpenCreateDialogFromQuery() {
+  const rawCreate = Array.isArray(route.query.create) ? route.query.create[0] : route.query.create
+  if (rawCreate !== '1') {
+    return
+  }
+
+  openCreateDialog()
+  router.replace({
+    path: route.path,
+    query: {
+      ...route.query,
+      create: undefined,
+    },
+  })
 }
 
 function openEditDialog(record) {
@@ -151,11 +202,11 @@ async function saveDraft() {
     oldPrice: form.oldPrice === '' ? null : Number(form.oldPrice),
     quality: Number(form.quality),
     location: String(form.location || '').trim(),
-    cover: String(form.cover || '').trim(),
+    imageUrls: String(form.cover || '').trim() ? [String(form.cover || '').trim()] : [],
   }
 
   if (!payload.categoryId || !payload.title || !payload.price || payload.price <= 0) {
-    ElMessage.warning('请填写完整商品信息')
+    ElMessage.warning('请完善必填商品信息')
     return
   }
 
@@ -234,13 +285,22 @@ function setPage(page) {
 
 onMounted(() => {
   fetchPage()
+  connectGoodsStatusSocket()
+  tryOpenCreateDialogFromQuery()
+})
+
+onBeforeUnmount(() => {
+  goodsStatusSocket?.close()
+  if (refreshTimer) {
+    window.clearTimeout(refreshTimer)
+  }
 })
 </script>
 
 <template>
   <div class="goods-manage-page">
     <el-card v-if="!isSeller" class="empty-card">
-      <el-empty description="当前账号不是卖家，无法管理商品">
+      <el-empty description="当前账号还不是卖家，暂时不能管理商品。">
         <el-button type="primary" @click="router.push('/seller-auth')">去卖家认证</el-button>
       </el-empty>
     </el-card>
@@ -250,7 +310,7 @@ onMounted(() => {
         <div class="toolbar">
           <h3>我的商品</h3>
           <div class="actions">
-            <el-select v-model="queryForm.status" placeholder="状态筛选" clearable style="width: 140px" @change="fetchPage">
+            <el-select v-model="queryForm.status" placeholder="筛选状态" clearable style="width: 160px" @change="fetchPage">
               <el-option label="草稿" :value="0" />
               <el-option label="待审核" :value="1" />
               <el-option label="已驳回" :value="2" />
@@ -265,14 +325,14 @@ onMounted(() => {
 
       <el-card class="table-card">
         <el-table :data="records" v-loading="loading">
-          <el-table-column prop="id" label="ID" width="120" />
+          <el-table-column prop="id" label="编号" width="120" />
           <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
           <el-table-column prop="price" label="价格" width="100">
             <template #default="{ row }">￥{{ row.price }}</template>
           </el-table-column>
           <el-table-column prop="quality" label="成色" width="100" />
-          <el-table-column prop="location" label="面交地点" min-width="140" show-overflow-tooltip />
-          <el-table-column label="状态" width="120">
+          <el-table-column prop="location" label="地点" min-width="140" show-overflow-tooltip />
+          <el-table-column label="状态" width="140">
             <template #default="{ row }">
               <el-tag :type="statusType(row.status)">{{ GOODS_STATUS_LABEL_MAP[row.status] || row.status }}</el-tag>
             </template>
@@ -293,7 +353,7 @@ onMounted(() => {
                   :disabled="!canSubmitAudit(row.status) || actionLoadingId === String(row.id)"
                   @click="handleSubmitAudit(row)"
                 >
-                  提审
+                  提交审核
                 </el-button>
                 <el-button
                   size="small"
@@ -324,31 +384,31 @@ onMounted(() => {
       </el-card>
     </template>
 
-    <el-dialog v-model="dialogVisible" :title="isEditing ? '编辑商品草稿' : '新建商品草稿'" width="640px">
+    <el-dialog v-model="dialogVisible" :title="isEditing ? '编辑商品草稿' : '创建商品草稿'" width="640px">
       <el-form label-width="90px">
-        <el-form-item label="分类ID">
-          <el-input v-model="form.categoryId" placeholder="请输入分类 ID" />
+        <el-form-item label="分类编号">
+          <el-input v-model="form.categoryId" placeholder="请输入分类编号" />
         </el-form-item>
-        <el-form-item label="标题">
-          <el-input v-model="form.title" placeholder="请输入标题" maxlength="100" />
+        <el-form-item label="商品标题">
+          <el-input v-model="form.title" placeholder="请输入商品标题" maxlength="100" />
         </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="form.detail" type="textarea" :rows="3" placeholder="请输入描述" />
+        <el-form-item label="商品描述">
+          <el-input v-model="form.detail" type="textarea" :rows="3" placeholder="请输入商品描述" />
         </el-form-item>
-        <el-form-item label="价格">
-          <el-input v-model="form.price" type="number" min="0.01" placeholder="请输入价格" />
+        <el-form-item label="售价">
+          <el-input v-model="form.price" type="number" min="0.01" placeholder="请输入售价" />
         </el-form-item>
         <el-form-item label="原价">
-          <el-input v-model="form.oldPrice" type="number" min="0.01" placeholder="可不填" />
+          <el-input v-model="form.oldPrice" type="number" min="0.01" placeholder="选填" />
         </el-form-item>
         <el-form-item label="成色">
-          <el-input v-model="form.quality" type="number" min="1" max="10" placeholder="1-10" />
+          <el-input v-model="form.quality" type="number" min="1" max="5" placeholder="请输入 1-5" />
         </el-form-item>
-        <el-form-item label="面交地点">
+        <el-form-item label="交易地点">
           <el-input v-model="form.location" placeholder="例如：图书馆门口" />
         </el-form-item>
-        <el-form-item label="封面URL">
-          <el-input v-model="form.cover" placeholder="请输入封面图链接" />
+        <el-form-item label="封面图片">
+          <el-input v-model="form.cover" placeholder="请输入封面图片地址" />
         </el-form-item>
       </el-form>
       <template #footer>

@@ -5,7 +5,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Camera, Check, Refresh, SwitchButton, User } from '@element-plus/icons-vue'
 import MarketplaceUserSidebar from '@/components/MarketplaceUserSidebar.vue'
 import { ROLE_LABEL_MAP } from '@/constants/auth'
-import { OSS_UPLOAD_CATEGORY } from '@/constants/upload'
+import {
+  ALLOWED_IMAGE_MIME_TYPES,
+  ALLOWED_IMAGE_SUFFIXES,
+  IMAGE_UPLOAD_ACCEPT,
+  OSS_UPLOAD_CATEGORY,
+  UPLOAD_MAX_FILE_COUNT,
+  UPLOAD_MAX_SIZE_MB,
+} from '@/constants/upload'
 import { useAuthStore } from '@/stores/auth'
 import {
   deleteCurrentUserProfile,
@@ -35,6 +42,23 @@ const profileForm = reactive({
 const profileName = computed(() => profileForm.name || profileForm.studentNo || '校园用户')
 const roleLabel = computed(() => ROLE_LABEL_MAP[profileForm.role] || '普通用户')
 const avatarUrl = computed(() => profileForm.avatar || authStore.user.avatar || '')
+
+function beforeAvatarUpload(file) {
+  const suffix = typeof file?.name === 'string' ? file.name.split('.').pop()?.trim().toLowerCase() || '' : ''
+  const mimeType = typeof file?.type === 'string' ? file.type.trim().toLowerCase() : ''
+
+  if (!ALLOWED_IMAGE_SUFFIXES.includes(suffix) || !ALLOWED_IMAGE_MIME_TYPES.includes(mimeType)) {
+    ElMessage.warning('仅支持 jpg/jpeg/png/webp/gif 格式图片')
+    return false
+  }
+
+  if (Number(file?.size || 0) > UPLOAD_MAX_SIZE_MB * 1024 * 1024) {
+    ElMessage.warning(`图片大小不能超过 ${UPLOAD_MAX_SIZE_MB}MB`)
+    return false
+  }
+
+  return true
+}
 
 const profileMetrics = computed(() => [
   {
@@ -214,7 +238,10 @@ onMounted(() => {
                 class="avatar-upload"
                 :show-file-list="false"
                 :http-request="handleAvatarUpload"
-                accept="image/*"
+                :before-upload="beforeAvatarUpload"
+                :limit="UPLOAD_MAX_FILE_COUNT"
+                :on-exceed="() => ElMessage.warning('单次只允许上传 1 张图片')"
+                :accept="IMAGE_UPLOAD_ACCEPT"
               >
                 <el-button circle :icon="Camera" :loading="avatarUploading" />
               </el-upload>

@@ -1,18 +1,21 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Check, ChevronRight, ImagePlus, LoaderCircle, Trash2, UploadCloud } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import request, { ensureLoggedIn } from '@/utils/request'
+import { fetchSellerPortal } from '@/api/user'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024
+const MAX_IMAGE_COUNT = 9
 const MAX_TITLE_LENGTH = 100
 const MAX_LOCATION_LENGTH = 120
 const MIN_QUALITY = 1
 const MAX_QUALITY = 5
 const route = useRoute()
+const router = useRouter()
 
 const form = reactive({
   categoryId: '',
@@ -42,6 +45,7 @@ const categoryPanelOpen = ref(false)
 const activeLevel1Index = ref(0)
 const activeLevel2Index = ref(0)
 const loadingCategories = ref(false)
+const checkingSellerPortal = ref(false)
 const uploadingImages = ref(false)
 const savingDraft = ref(false)
 const submittingAudit = ref(false)
@@ -72,10 +76,16 @@ const level3Categories = computed(
   () => level2Categories.value[activeLevel2Index.value]?.children || [],
 )
 const detailLength = computed(() => form.detail.length)
-const canPickMoreImages = computed(() => !uploadingImages.value)
+const canPickMoreImages = computed(
+  () => !uploadingImages.value && form.imageUrls.length < MAX_IMAGE_COUNT,
+)
 const isBusy = computed(
   () =>
-    uploadingImages.value || savingDraft.value || submittingAudit.value || loadingCategories.value,
+    uploadingImages.value ||
+    savingDraft.value ||
+    submittingAudit.value ||
+    loadingCategories.value ||
+    checkingSellerPortal.value,
 )
 
 function flattenCategories(tree, prefix = []) {
@@ -101,6 +111,40 @@ function syncCategoryIndexes() {
   activeLevel2Index.value = 0
 }
 
+function syncCategoryIndexesById(categoryId) {
+  if (!categoryId) {
+    syncCategoryIndexes()
+    return
+  }
+
+  const targetId = String(categoryId)
+  for (let level1Index = 0; level1Index < categories.value.length; level1Index += 1) {
+    const level1 = categories.value[level1Index]
+    if (String(level1.id) === targetId) {
+      activeLevel1Index.value = level1Index
+      activeLevel2Index.value = 0
+      return
+    }
+
+    const level2List = Array.isArray(level1.children) ? level1.children : []
+    for (let level2Index = 0; level2Index < level2List.length; level2Index += 1) {
+      const level2 = level2List[level2Index]
+      if (String(level2.id) === targetId) {
+        activeLevel1Index.value = level1Index
+        activeLevel2Index.value = level2Index
+        return
+      }
+
+      const level3List = Array.isArray(level2.children) ? level2.children : []
+      if (level3List.some((item) => String(item.id) === targetId)) {
+        activeLevel1Index.value = level1Index
+        activeLevel2Index.value = level2Index
+        return
+      }
+    }
+  }
+}
+
 function showToast(message, type = 'success') {
   toast.visible = true
   toast.type = type
@@ -110,6 +154,27 @@ function showToast(message, type = 'success') {
   showToast.timer = window.setTimeout(() => {
     toast.visible = false
   }, 2600)
+}
+
+async function ensureSellerPortalAccess(source = 'publish') {
+  if (!ensureLoggedIn({ source })) {
+    return false
+  }
+
+  checkingSellerPortal.value = true
+  try {
+    const { data } = await fetchSellerPortal()
+    if (data?.code !== 1) {
+      throw new Error(data?.msg || '当前账号尚未开通卖家权限')
+    }
+    return true
+  } catch (error) {
+    showToast(getErrorMessage(error, '当前账号尚未开通卖家权限'), 'error')
+    router.push('/user/security')
+    return false
+  } finally {
+    checkingSellerPortal.value = false
+  }
 }
 
 function getErrorMessage(error, fallback) {
@@ -217,7 +282,7 @@ async function fetchCategories() {
     }
 
     categories.value = Array.isArray(data.data) ? data.data : []
-    syncCategoryIndexes()
+    syncCategoryIndexesById(form.categoryId)
   } catch (error) {
     showToast(getErrorMessage(error, '分类加载失败'), 'error')
   } finally {
@@ -267,7 +332,7 @@ function handleLevel1Click(index) {
   activeLevel2Index.value = 0
 }
 
-function handleLevel2Click(index) {
+function handleLevel2Preview(index) {
   activeLevel2Index.value = index
 }
 
@@ -282,6 +347,12 @@ async function handleFilesChange(event) {
   event.target.value = ''
 
   if (!files.length) {
+    return
+  }
+
+  if (form.imageUrls.length + files.length > MAX_IMAGE_COUNT) {
+    errors.imageUrls = `最多只能上传 ${MAX_IMAGE_COUNT} 张图片`
+    showToast(`最多只能上传 ${MAX_IMAGE_COUNT} 张图片`, 'error')
     return
   }
 
@@ -350,7 +421,7 @@ async function saveDraftInternal() {
 }
 
 async function handleSaveDraft() {
-  if (!ensureLoggedIn({ source: 'publish-save-draft' })) {
+  if (!(await ensureSellerPortalAccess('publish-save-draft'))) {
     return
   }
 
@@ -371,7 +442,7 @@ async function handleSaveDraft() {
 }
 
 async function handleSubmitAudit() {
-  if (!ensureLoggedIn({ source: 'publish-submit-audit' })) {
+  if (!(await ensureSellerPortalAccess('publish-submit-audit'))) {
     return
   }
 
@@ -400,6 +471,13 @@ async function handleSubmitAudit() {
 onMounted(() => {
   fetchCategories()
 })
+
+watch(
+  () => form.categoryId,
+  (value) => {
+    syncCategoryIndexesById(value)
+  },
+)
 
 watch(
   () => route.query.id,
@@ -449,7 +527,7 @@ watch(
                   >
                     <LoaderCircle v-if="uploadingImages" class="h-4 w-4 animate-spin" />
                     <ImagePlus v-else class="h-4 w-4" />
-                    添加图片
+                    {{ form.imageUrls.length >= MAX_IMAGE_COUNT ? '已达上限' : '添加图片' }}
                   </Button>
                 </div>
 
@@ -470,7 +548,9 @@ watch(
                     @click="pickImages"
                   >
                     <UploadCloud class="h-7 w-7" />
-                    <span class="mt-2 text-sm font-medium">上传图片</span>
+                    <span class="mt-2 text-sm font-medium">
+                      {{ form.imageUrls.length >= MAX_IMAGE_COUNT ? '已达 9 张' : '上传图片' }}
+                    </span>
                   </button>
 
                   <div
@@ -600,25 +680,35 @@ watch(
                           二级分类
                         </div>
                         <div class="flex-1 space-y-1 overflow-y-auto pr-1">
-                          <button
+                          <div
                             v-for="(item, index) in level2Categories"
                             :key="item.id"
-                            type="button"
-                            class="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-medium transition"
-                            :class="
-                              index === activeLevel2Index
-                                ? 'bg-brand-50 text-brand-700'
-                                : 'text-slate-700 hover:bg-slate-50'
-                            "
-                            @click="
-                              item.children?.length
-                                ? handleLevel2Click(index)
-                                : handleCategoryPick(item)
-                            "
+                            class="flex items-center gap-2"
                           >
-                            <span>{{ item.name }}</span>
-                            <ChevronRight v-if="item.children?.length" class="h-4 w-4" />
-                          </button>
+                            <button
+                              type="button"
+                              class="flex min-w-0 flex-1 items-center rounded-2xl px-3 py-3 text-left text-sm font-medium transition"
+                              :class="
+                                String(form.categoryId) === String(item.id)
+                                  ? 'bg-brand-100 text-brand-700'
+                                  : index === activeLevel2Index
+                                    ? 'bg-brand-50 text-brand-700'
+                                    : 'text-slate-700 hover:bg-slate-50'
+                              "
+                              @click="handleCategoryPick(item)"
+                            >
+                              <span class="truncate">{{ item.name }}</span>
+                            </button>
+                            <button
+                              v-if="item.children?.length"
+                              type="button"
+                              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:border-brand-300 hover:text-brand-700"
+                              :class="index === activeLevel2Index ? 'border-brand-300 text-brand-700' : ''"
+                              @click="handleLevel2Preview(index)"
+                            >
+                              <ChevronRight class="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
 

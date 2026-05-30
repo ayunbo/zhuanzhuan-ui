@@ -153,6 +153,15 @@ const router = createRouter({
           },
         },
         {
+          path: 'search-history',
+          name: 'user-search-history',
+          component: () => import('../views/UserSearchHistoryView.vue'),
+          meta: {
+            ...userCenterMeta,
+            title: '搜索历史',
+          },
+        },
+        {
           path: 'profile',
           name: 'user-profile',
           component: () => import('../views/UserProfileSettingsView.vue'),
@@ -167,7 +176,7 @@ const router = createRouter({
           component: () => import('../views/UserSellerAuthView.vue'),
           meta: {
             ...userCenterMeta,
-            title: '身份认证',
+            title: '卖家认证',
           },
         },
         {
@@ -176,7 +185,7 @@ const router = createRouter({
           component: () => import('../views/UserWalletView.vue'),
           meta: {
             ...userCenterMeta,
-            title: '虚拟钱包',
+            title: '我的钱包',
           },
         },
       ],

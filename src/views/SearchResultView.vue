@@ -15,6 +15,11 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import request, { ensureLoggedIn } from '@/utils/request'
+import {
+  SEARCH_QUALITY_OPTIONS,
+  SEARCH_SORT_OPTIONS,
+  normalizeSearchSortBy,
+} from '@/utils/search'
 
 const route = useRoute()
 const router = useRouter()
@@ -35,10 +40,13 @@ const selectedCategoryName = ref('全部分类')
 const searchParams = reactive({
   keyword: '',
   categoryId: '',
+  quality: '',
+  location: '',
   minPrice: '',
   maxPrice: '',
   sellerId: '',
   status: 3,
+  sortBy: 'time',
   page: 1,
   pageSize: PAGE_SIZE,
 })
@@ -147,6 +155,7 @@ function normalizeProduct(record) {
     title: record.title || '未命名商品',
     price: record.price,
     oldPrice: record.oldPrice,
+    quality: record.quality,
     location: record.location || '校内面交',
     cover: record.cover || '',
     sellerName: record.sellerName || `卖家${record.sellerId ?? ''}`,
@@ -234,6 +243,9 @@ function syncParamsFromRoute() {
   searchParams.maxPrice =
     typeof route.query.maxPrice === 'string' ? route.query.maxPrice : ''
   searchParams.sellerId = typeof route.query.sellerId === 'string' ? route.query.sellerId : ''
+  searchParams.quality = typeof route.query.quality === 'string' ? route.query.quality : ''
+  searchParams.location = typeof route.query.location === 'string' ? route.query.location : ''
+  searchParams.sortBy = normalizeSearchSortBy(route.query.sortBy)
 
   const currentPage = Number(route.query.page || 1)
   searchParams.page = Number.isFinite(currentPage) && currentPage > 0 ? currentPage : 1
@@ -264,6 +276,18 @@ function buildRouteQuery() {
 
   if (searchParams.sellerId) {
     query.sellerId = searchParams.sellerId
+  }
+
+  if (searchParams.quality) {
+    query.quality = searchParams.quality
+  }
+
+  if (searchParams.location.trim()) {
+    query.location = searchParams.location.trim()
+  }
+
+  if (searchParams.sortBy && searchParams.sortBy !== 'time') {
+    query.sortBy = searchParams.sortBy
   }
 
   if (searchParams.page > 1) {
@@ -298,6 +322,18 @@ function buildRequestParams() {
 
   if (searchParams.sellerId) {
     params.sellerId = Number(searchParams.sellerId)
+  }
+
+  if (searchParams.quality) {
+    params.quality = Number(searchParams.quality)
+  }
+
+  if (searchParams.location.trim()) {
+    params.location = searchParams.location.trim()
+  }
+
+  if (searchParams.sortBy) {
+    params.sortBy = normalizeSearchSortBy(searchParams.sortBy)
   }
 
   return params
@@ -383,6 +419,23 @@ async function clearCategoryFilter() {
 }
 
 async function handlePriceConfirm() {
+  searchParams.page = 1
+  await replaceRouteQuery()
+}
+
+async function handleLocationConfirm() {
+  searchParams.page = 1
+  await replaceRouteQuery()
+}
+
+async function handleSortChange(sortBy) {
+  searchParams.sortBy = normalizeSearchSortBy(sortBy)
+  searchParams.page = 1
+  await replaceRouteQuery()
+}
+
+async function handleQualityChange(quality) {
+  searchParams.quality = quality
   searchParams.page = 1
   await replaceRouteQuery()
 }
@@ -567,6 +620,60 @@ onBeforeUnmount(() => {
                   </button>
                 </transition>
               </div>
+            </div>
+          </div>
+
+          <div class="mt-3 flex flex-wrap items-center gap-3">
+            <div class="flex flex-wrap items-center gap-1">
+              <span class="mr-1 text-sm font-medium text-slate-500">排序</span>
+              <button
+                v-for="item in SEARCH_SORT_OPTIONS"
+                :key="item.value"
+                type="button"
+                class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors"
+                :class="
+                  searchParams.sortBy === item.value
+                    ? 'bg-brand-500 text-white shadow-[0_10px_22px_-14px_rgba(249,115,22,0.9)]'
+                    : 'text-slate-600 hover:bg-slate-100'
+                "
+                @click="handleSortChange(item.value)"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-1">
+              <span class="mr-1 text-sm font-medium text-slate-500">成色</span>
+              <button
+                v-for="item in SEARCH_QUALITY_OPTIONS"
+                :key="item.value || 'all-quality'"
+                type="button"
+                class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors"
+                :class="
+                  searchParams.quality === item.value
+                    ? 'bg-brand-500 text-white shadow-[0_10px_22px_-14px_rgba(249,115,22,0.9)]'
+                    : 'text-slate-600 hover:bg-slate-100'
+                "
+                @click="handleQualityChange(item.value)"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="mr-1 text-sm font-medium text-slate-500">位置</span>
+              <div class="w-52 min-w-0 shrink-0">
+                <Input
+                  v-model="searchParams.location"
+                  type="text"
+                  placeholder="位置 / 校区"
+                  class="h-9 border-slate-200 bg-white"
+                  @keyup.enter="handleLocationConfirm"
+                />
+              </div>
+              <Button type="button" size="sm" class="h-9 px-4" @click="handleLocationConfirm">
+                确认
+              </Button>
             </div>
           </div>
 

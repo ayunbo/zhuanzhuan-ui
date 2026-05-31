@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Clock3, MapPin, Trash2 } from 'lucide-vue-next'
 import MarketplaceEmptyState from '@/components/MarketplaceEmptyState.vue'
-import MarketplaceUserSidebar from '@/components/MarketplaceUserSidebar.vue'
+import UserCenterSidebar from '@/components/UserCenterSidebar.vue'
 import { clearBrowseHistory, deleteBrowseHistory, fetchBrowseHistoryArchive } from '@/api/history'
 import { GOODS_STATUS, GOODS_STATUS_LABEL_MAP } from '@/constants/goods'
 import { ensureLoggedIn } from '@/utils/request'
@@ -166,7 +166,7 @@ onMounted(loadArchives)
   <section class="history-page">
     <div class="history-shell">
       <aside class="history-side">
-        <MarketplaceUserSidebar activeKey="history" />
+        <UserCenterSidebar />
       </aside>
 
       <main class="history-main">

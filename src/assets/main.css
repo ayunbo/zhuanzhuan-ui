@@ -12,6 +12,19 @@
   --font-sans: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Inter', sans-serif;
 }
 
+:root {
+  --zz-black: #0f172a;
+  --zz-text: #0f172a;
+  --zz-text-light: #334155;
+  --zz-text-secondary: #64748b;
+  --zz-border: #e2e8f0;
+  --zz-border-strong: #cbd5e1;
+  --zz-yellow: #f59e0b;
+  --zz-yellow-soft: #fef3c7;
+  --zz-page-bg: #f8fafc;
+  --zz-shadow-sm: 0 10px 24px -18px rgba(15, 23, 42, 0.25);
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;

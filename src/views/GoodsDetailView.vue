@@ -16,9 +16,10 @@ import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { initChatSession } from '@/api/chat'
 import { recordBrowseHistory } from '@/api/history'
 import { getGoodsReviewPage } from '@/api/review'
-import request, { AUTH_CHANGED_EVENT, ensureLoggedIn, isLoggedIn } from '@/utils/request'
+import request, { AUTH_CHANGED_EVENT, ensureLoggedIn, getAuthUser, isLoggedIn } from '@/utils/request'
 
 const route = useRoute()
 const router = useRouter()
@@ -31,6 +32,7 @@ const reportDialogVisible = ref(false)
 const reportSubmitting = ref(false)
 const browseRecordLoading = ref(false)
 const reviewsLoading = ref(false)
+const chatOpening = ref(false)
 const reviewRecords = ref([])
 
 const reviewPager = reactive({
@@ -359,11 +361,55 @@ function openSellerSpace() {
   router.push(`/seller/${detail.sellerId}`)
 }
 
-function handleChat() {
+async function handleChat() {
   if (!ensureLoggedIn({ source: 'goods-detail-chat' })) {
     return
   }
-  showToast('聊天功能开发中')
+  if (chatOpening.value) {
+    return
+  }
+  if (!detail.id || !detail.sellerId) {
+    showToast('商品或卖家信息缺失，暂时无法发起聊天', 'error')
+    return
+  }
+
+  const currentUser = getAuthUser()
+  const buyerId = Number(currentUser?.id)
+  const sellerId = Number(detail.sellerId)
+
+  if (!buyerId) {
+    showToast('请先登录后再联系卖家', 'error')
+    return
+  }
+  if (buyerId === sellerId) {
+    showToast('不能和自己发布的商品发起聊天', 'error')
+    return
+  }
+
+  chatOpening.value = true
+  try {
+    const session = await initChatSession({
+      goodsId: Number(detail.id),
+      sellerId,
+      buyerId,
+    })
+    const sessionId = Number(session?.sessionId || 0)
+
+    if (!sessionId) {
+      throw new Error('服务端未返回聊天会话')
+    }
+
+    router.push({
+      path: '/chat',
+      query: {
+        sessionId: String(sessionId),
+      },
+    })
+  } catch (error) {
+    showToast(getErrorMessage(error, '聊天会话打开失败'), 'error')
+  } finally {
+    chatOpening.value = false
+  }
 }
 
 function handleBuyNow() {
@@ -666,11 +712,13 @@ onBeforeUnmount(() => {
                 <div class="grid min-w-0 grid-cols-2 overflow-hidden rounded-full">
                   <button
                     type="button"
-                    class="flex h-12 items-center justify-center gap-2 bg-[#ffe55c] px-4 text-base font-bold text-slate-900 transition hover:bg-[#ffdf40]"
+                    class="flex h-12 items-center justify-center gap-2 bg-[#ffe55c] px-4 text-base font-bold text-slate-900 transition hover:bg-[#ffdf40] disabled:cursor-wait disabled:bg-slate-200 disabled:text-slate-500"
+                    :disabled="chatOpening"
                     @click="handleChat"
                   >
-                    <MessageCircle class="h-4 w-4" />
-                    聊一聊
+                    <LoaderCircle v-if="chatOpening" class="h-4 w-4 animate-spin" />
+                    <MessageCircle v-else class="h-4 w-4" />
+                    {{ chatOpening ? '打开中' : '聊一聊' }}
                   </button>
                   <button
                     type="button"

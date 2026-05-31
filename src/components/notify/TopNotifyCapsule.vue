@@ -111,36 +111,35 @@ onBeforeUnmount(() => {
 <style scoped>
 .notify-capsule-shell {
   position: fixed;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 18px;
+  right: 18px;
   z-index: 2200;
-  width: min(92vw, 560px);
+  width: min(90vw, 360px);
   pointer-events: none;
 }
 
 .notify-capsule {
   pointer-events: auto;
   display: grid;
-  grid-template-columns: 44px 1fr 28px;
+  grid-template-columns: 34px 1fr 24px;
   align-items: start;
-  gap: 14px;
-  border-radius: 22px;
-  padding: 14px 16px 14px 14px;
+  gap: 10px;
+  border-radius: 14px;
+  padding: 10px 12px 10px 10px;
   background:
     radial-gradient(circle at 14% 18%, rgba(255, 239, 218, 0.42), transparent 38%),
     radial-gradient(circle at 76% 18%, rgba(236, 246, 255, 0.7), transparent 44%),
     linear-gradient(105deg, #fffdf9 0%, #fff8ef 35%, #fbfcfb 60%, #f5fbff 100%);
   border: 1px solid rgba(226, 232, 240, 0.72);
   box-shadow:
-    0 24px 42px rgba(95, 121, 153, 0.09),
-    0 10px 18px rgba(148, 93, 52, 0.035);
+    0 16px 32px rgba(95, 121, 153, 0.12),
+    0 8px 16px rgba(148, 93, 52, 0.045);
 }
 
 .capsule-accent {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
   color: #c08a61;
@@ -148,59 +147,65 @@ onBeforeUnmount(() => {
     radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.9), transparent 42%),
     linear-gradient(145deg, #fffaf5 0%, #ffedd7 58%, #eef7ff 100%);
   border: 1px solid rgba(255, 255, 255, 0.88);
-  box-shadow: 0 14px 28px rgba(95, 121, 153, 0.08);
-  font-size: 20px;
+  box-shadow: 0 10px 20px rgba(95, 121, 153, 0.08);
+  font-size: 16px;
 }
 
 .copy-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 4px;
+  gap: 8px;
+  margin-bottom: 3px;
 }
 
 .tag {
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: 3px 8px;
   background: rgba(255, 255, 255, 0.78);
   color: #9b755b;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   border: 1px solid rgba(255, 235, 211, 0.76);
 }
 
 .time {
   color: #7c8a9a;
-  font-size: 12px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .capsule-copy h4 {
   margin: 0;
   color: #334155;
-  font-size: 16px;
+  font-size: 14px;
+  line-height: 1.35;
   font-weight: 800;
 }
 
 .capsule-copy p {
-  margin: 6px 0 0;
+  display: -webkit-box;
+  margin: 4px 0 0;
+  overflow: hidden;
   color: #64748b;
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .action-btn {
-  margin-top: 10px;
+  margin-top: 8px;
   border: none;
   border-radius: 999px;
-  padding: 8px 14px;
+  padding: 6px 11px;
   cursor: pointer;
   background: rgba(255, 255, 255, 0.82);
   color: #9b755b;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   border: 1px solid rgba(255, 235, 211, 0.82);
-  box-shadow: 0 12px 24px rgba(95, 121, 153, 0.075);
+  box-shadow: 0 8px 16px rgba(95, 121, 153, 0.075);
 }
 
 .action-btn:hover {
@@ -208,8 +213,8 @@ onBeforeUnmount(() => {
 }
 
 .close-btn {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: none;
   border-radius: 999px;
   display: grid;
@@ -233,26 +238,25 @@ onBeforeUnmount(() => {
 .notify-drop-enter-from,
 .notify-drop-leave-to {
   opacity: 0;
-  transform: translateY(-18px);
+  transform: translate(18px, -8px);
 }
 
 @media (max-width: 768px) {
   .notify-capsule-shell {
     top: 10px;
-    width: min(94vw, 560px);
+    right: 10px;
+    width: calc(100vw - 20px);
   }
 
   .notify-capsule {
-    grid-template-columns: 40px 1fr 24px;
-    gap: 10px;
-    padding: 12px;
-    border-radius: 18px;
+    grid-template-columns: 32px 1fr 24px;
+    gap: 9px;
+    padding: 10px;
   }
 
   .capsule-accent {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
+    width: 32px;
+    height: 32px;
   }
 
   .copy-top {

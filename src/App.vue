@@ -4,7 +4,6 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 import { ChevronDown, Clock3, LoaderCircle, Search, ShoppingBag } from 'lucide-vue-next'
 import { fetchHotSearches, fetchSearchSuggestions } from '@/api/search'
 import AuthDialog from '@/components/AuthDialog.vue'
-import NotifyDebugPanel from '@/components/notify/NotifyDebugPanel.vue'
 import TopNotifyCapsule from '@/components/notify/TopNotifyCapsule.vue'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -47,9 +46,6 @@ const notifyCapsuleVisible = ref(false)
 const notifyCapsuleVersion = ref(0)
 const notifyCapsuleNotice = ref(null)
 const notifyCapsuleActionText = computed(() => getNoticeActionText(notifyCapsuleNotice.value))
-const showNotifyDebugPanel = computed(
-  () => import.meta.env.DEV || import.meta.env.VITE_ENABLE_NOTIFY_DEBUG_PANEL === 'true',
-)
 const displaySearchSuggestions = computed(() =>
   isSuggestionLoading.value
     ? []
@@ -678,7 +674,6 @@ watch(
     </main>
 
     <AuthDialog />
-    <NotifyDebugPanel v-if="showNotifyDebugPanel" />
     <TopNotifyCapsule
       :visible="notifyCapsuleVisible"
       :title="notifyCapsuleNotice?.title || '系统通知'"
